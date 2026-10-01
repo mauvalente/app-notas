@@ -3,11 +3,13 @@ import { supabase } from './db.js';
 import { $, el, toast, mensagemDe, hora, rotuloDia, temMouse, guardado, confirmarComSegundoToque } from './util.js';
 import { formatar, primeiraUrl, urlSegura, envolverSelecao } from './formatar.js';
 import { buscarPreview, paraMensagem, previewLeve, urlDaThumb } from './preview.js';
+import { mensagensDoAssunto, guardarPaginaNova, guardarMensagens, removerMensagens, kvLer, kvGravar, filaTodas } from './store.js';
+import { gravar, aoProcessar, erroDeRede } from './sync.js';
 
 const POR_PAGINA = 50;
 
 const c = {
-  ctx: null,              // { usuario, assuntos(), aoEnviar(assuntoId, msg), aoMoverOuApagar() }
+  ctx: null,              // { usuario, assuntos(), aoEnviar(assuntoId, msg), aoMoverOuApagar(), marcarLido(assuntoId) }
   assunto: null,
   mensagens: [],          // em ordem crescente de criado_em
   temMais: false,
@@ -54,18 +56,96 @@ export async function abrirConversa(assunto) {
   lista.replaceChildren(el('div', { className: 'aviso-centro' }, 'Carregando…'));
 
   const id = assunto.id;
+  // 1. O que está guardado no aparelho aparece na hora (funciona sem internet)
+  const doCache = await mensagensDoAssunto(id);
+  if (c.assunto?.id !== id) return;
+  if (doCache.length) {
+    c.mensagens = doCache;
+    desenhar();
+    rolarParaFim();
+  }
+  c.ctx.marcarLido(id);
+
+  // 2. Depois, a versão do servidor
   const [msgs] = await Promise.all([buscarPagina(id), carregarMembros(id)]);
   if (c.assunto?.id !== id) return; // trocou de assunto enquanto carregava
   if (msgs.error) {
-    lista.replaceChildren(el('div', { className: 'aviso-centro erro' }, 'Não consegui carregar as mensagens. ' + mensagemDe(msgs.error)));
+    if (!doCache.length) {
+      lista.replaceChildren(el('div', { className: 'aviso-centro erro' }, erroDeRede(msgs.error)
+        ? 'Sem internet e nada guardado neste aparelho para este assunto ainda.'
+        : 'Não consegui carregar as mensagens. ' + mensagemDe(msgs.error)));
+    }
     return;
   }
-  c.mensagens = msgs.data.reverse();
-  c.temMais = msgs.data.length === POR_PAGINA;
+  // o que ainda está na fila (apagado/editado sem internet) vale mais que o servidor
+  const fila = await filaTodas();
+  const apagando = new Set(fila.filter(o => o.tipo === 'apagar').flatMap(o => o.ids));
+  const editando = new Map(fila.filter(o => o.tipo === 'editar').map(o => [o.id, o.campos]));
+  const pagina = msgs.data.reverse().filter(m => !apagando.has(m.id)).map(m => editando.has(m.id) ? { ...m, ...editando.get(m.id) } : m);
+  const completa = msgs.data.length < POR_PAGINA;
+  await guardarPaginaNova(id, pagina, completa);
+  const pendentes = c.mensagens.filter(m => m._pendente);
+  const antigas = completa ? [] : c.mensagens.filter(m => !m._pendente && pagina.length && m.criado_em < pagina[0].criado_em);
+  const estavaNoFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;
+  c.mensagens = [...antigas, ...pagina, ...pendentes.filter(p => !pagina.some(m => m.id === p.id))];
+  c.temMais = !completa;
   desenhar();
-  rolarParaFim();
+  if (!doCache.length || estavaNoFim) rolarParaFim();
   if (temMouse()) ta.focus();
 }
+
+/* ============================================================
+   Mudanças chegando em tempo real (de outro aparelho ou da outra pessoa)
+   ============================================================ */
+
+export function receberMensagem(row) {
+  if (!c.assunto) return;
+  const i = c.mensagens.findIndex(m => m.id === row.id);
+  const daqui = row.categoria_id === c.assunto.id && !row.apagado_em;
+  if (!daqui) {
+    if (row.apagado_em || i >= 0) removerMensagens([row.id]);   // apagada ou movida para outro assunto
+    if (i >= 0) { c.mensagens.splice(i, 1); desenhar(); }
+    return;
+  }
+  const m = { id: row.id, categoria_id: row.categoria_id, autor_id: row.autor_id, texto: row.texto,
+    link: row.link, criado_em: row.criado_em, editado_em: row.editado_em };
+  if (i >= 0) {
+    if (c.editando?.id === m.id) return; // não atropela quem está editando
+    c.mensagens[i] = m;
+  } else {
+    c.mensagens.push(m);
+    c.mensagens.sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+  }
+  guardarMensagens([m]);
+  const estavaNoFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 120;
+  desenhar();
+  if (estavaNoFim) rolarParaFim();
+  if (document.visibilityState === 'visible') c.ctx.marcarLido(c.assunto.id);
+}
+
+/* Resultado da fila de envio */
+aoProcessar(({ op, ok, erro }) => {
+  if (op.tipo === 'inserir') {
+    const m = c.mensagens.find(x => x.id === op.msg.id);
+    if (ok) {
+      const final = { ...op.msg };
+      guardarMensagens([final]);
+      if (m) { delete m._pendente; m.link = final.link; desenhar(); }
+      c.ctx.aoEnviar(op.msg.categoria_id, final);
+    } else {
+      removerMensagens([op.msg.id]);
+      if (m) { c.mensagens = c.mensagens.filter(x => x !== m); desenhar(); }
+      toast('Uma mensagem não pôde ser enviada. ' + mensagemDe(erro));
+    }
+    return;
+  }
+  if (!ok) {
+    toast((op.tipo === 'apagar' ? 'Não deu para excluir. ' : 'Não deu para salvar a edição. ') + mensagemDe(erro));
+    if (c.assunto) { const a = c.assunto; c.assunto = null; abrirConversa(a); } // recarrega a versão do servidor
+    return;
+  }
+  c.ctx.aoMoverOuApagar();
+});
 
 export function fecharConversa() {
   if (!c.assunto) return;
@@ -97,7 +177,9 @@ function buscarPagina(categoriaId, antesDe) {
 }
 
 async function carregarMembros(categoriaId) {
-  const { data } = await supabase.rpc('membros_da_categoria', { p_categoria: categoriaId });
+  let { data, error } = await supabase.rpc('membros_da_categoria', { p_categoria: categoriaId });
+  if (error) data = await kvLer('membros.' + categoriaId);          // sem internet: usa o último conhecido
+  else kvGravar('membros.' + categoriaId, data);
   c.membros = new Map((data || []).map(m => [m.usuario_id, m.nome]));
 }
 
@@ -340,26 +422,19 @@ $('sel-excluir').addEventListener('click', (e) => {
   const n = c.selecionadas.size;
   confirmarComSegundoToque(e.currentTarget, `Excluir ${n}?`, async () => {
     const ids = [...c.selecionadas];
-    const antes = c.mensagens;
     c.mensagens = c.mensagens.filter(m => !c.selecionadas.has(m.id));
     sairSelecao();
     desenhar();
-    const { error } = await supabase.from('mensagens')
-      .update({ apagado_em: new Date().toISOString() })
-      .in('id', ids);
-    if (error) {
-      c.mensagens = antes; desenhar();
-      toast('Não deu para excluir. ' + mensagemDe(error));
-      return;
-    }
+    await removerMensagens(ids);
+    await gravar({ tipo: 'apagar', ids, apagado_em: new Date().toISOString() });
     toast(ids.length > 1 ? `${ids.length} mensagens excluídas` : 'Mensagem excluída');
-    c.ctx.aoMoverOuApagar();
   });
 });
 
 /* ---------- Mover ---------- */
 
 $('sel-mover').addEventListener('click', () => {
+  if (!navigator.onLine) { toast('Mover precisa de internet.'); return; }
   const destinos = c.ctx.assuntos().filter(a => a.id !== c.assunto.id);
   const ul = $('mover-lista');
   ul.replaceChildren(...destinos.map(a => el('li', {},
@@ -379,6 +454,7 @@ $('mover-lista').addEventListener('click', async (e) => {
   const { data, error } = await supabase.rpc('mover_mensagens', { p_ids: ids, p_destino: b.dataset.id });
   if (error) { toast('Não deu para mover. ' + mensagemDe(error)); return; }
   c.mensagens = c.mensagens.filter(m => !c.selecionadas.has(m.id));
+  removerMensagens(ids);
   sairSelecao();
   desenhar();
   toast(`${data ?? ids.length} movida(s) para ${destino?.nome || 'outro assunto'}`);
@@ -549,7 +625,7 @@ async function enviarNova(texto, link) {
     editado_em: null,
     _pendente: true,
   };
-  // aparece na hora; o campo é limpo
+  // aparece na hora (com 🕓 até o servidor confirmar); o campo é limpo
   c.mensagens.push(msg);
   ta.value = '';
   c.preview = null; c.descartada = null;
@@ -557,39 +633,23 @@ async function enviarNova(texto, link) {
   desenharPreview(); ajustarAltura();
   desenhar(); rolarParaFim();
 
-  const { error } = await supabase.from('mensagens').insert({ id: msg.id, categoria_id: msg.categoria_id, texto, link });
-  if (error) {
-    c.mensagens = c.mensagens.filter(m => m.id !== msg.id);
-    if (c.assunto?.id === assunto.id) {
-      desenhar();
-      if (!ta.value) { ta.value = texto; ajustarAltura(); detectarLink(); }
-    }
-    toast('Não deu para enviar. ' + mensagemDe(error));
-    return;
-  }
-  delete msg._pendente;
-  if (c.assunto?.id === assunto.id) desenhar();
-  c.ctx.aoEnviar(assunto.id, msg);
+  await guardarMensagens([msg]);
+  const semPreview = link && !link.titulo && !link.imagem; // ex.: enviada sem internet
+  const { _pendente, ...dados } = msg;
+  await gravar({ tipo: 'inserir', msg: dados, buscarPreview: semPreview ? link.url : null });
+  if (!navigator.onLine) toast('Sem internet: a mensagem vai assim que a conexão voltar.');
 }
 
 async function salvarEdicao(texto, link) {
   const m = c.editando;
   if (!texto.trim() && !link) return;
-  const antes = { texto: m.texto, link: m.link, editado_em: m.editado_em };
   const editado_em = new Date().toISOString();
   Object.assign(m, { texto, link, editado_em });
   c.editando = null;
   cancelarEdicaoVisual();
   desenhar();
-
-  const { error } = await supabase.from('mensagens').update({ texto, link, editado_em }).eq('id', m.id);
-  if (error) {
-    Object.assign(m, antes);
-    desenhar();
-    toast('Não deu para salvar a edição. ' + mensagemDe(error));
-    return;
-  }
-  c.ctx.aoMoverOuApagar();
+  await guardarMensagens([m]);
+  await gravar({ tipo: 'editar', id: m.id, campos: { texto, link, editado_em } });
 }
 
 function cancelarEdicaoVisual() {

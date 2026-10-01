@@ -12,6 +12,7 @@ Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREF
 | `js/main.js` | Inicialização, lista de assuntos, menu do assunto e rotas (`#/` lista, `#/c/<id>` conversa) |
 | `js/conversa.js` | Mensagens, campo de digitar, preview de links, seleção, editar, excluir, copiar e mover |
 | `js/formatar.js`, `js/preview.js`, `js/util.js` | Negrito/itálico/links, chamadas ao preview e às thumbs, utilitários |
+| `js/store.js`, `js/sync.js` | Cache no aparelho (IndexedDB) e fila de envio offline |
 | `js/auth.js` | Login Google → Supabase, plano B por redirecionamento, regra dos 180 dias |
 | `js/db.js`, `js/vendor/supabase.js` | Cliente do Supabase (biblioteca guardada no próprio repositório, sem depender de CDN) |
 | `config.js` | Endereços e chaves públicas: Supabase e Google |
@@ -19,6 +20,7 @@ Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREF
 | `sw.js` | Service worker: abre rápido e funciona offline. Ao publicar mudanças, aumente `CACHE = 'notas-vN'` |
 | `supabase/migrations/001_schema.sql` | Tabelas, regras de acesso (RLS), funções e o bucket das thumbs |
 | `supabase/migrations/002_ultimas_mensagens.sql` | Prévia da última mensagem de cada assunto na lista |
+| `supabase/migrations/003_tempo_real_nao_lidas.sql` | Tempo real para assuntos compartilhados + contador de não lidas |
 | `supabase/functions/link-preview/index.ts` | Edge Function que lê título, descrição e imagem dos links e guarda a thumb |
 | `.github/workflows/backup.yml` | Backup semanal do banco + ping para o Supabase não pausar |
 
@@ -233,6 +235,43 @@ Para usar: no Instagram → **Compartilhar** → role a fileira de baixo → **S
 > O Atalho abre o Notas **no Safari**, não no ícone da tela de início (o iPhone não deixa abrir um app da web pelo atalho). Na primeira vez, entre com o Google no Safari; depois fica salvo por 180 dias como no app.
 
 **4. Teste:** compartilhe um reel do Instagram, um vídeo do YouTube e uma página do navegador. Em cada um: "Salvar em…" → escolher assunto → enviar. Me conte se o link chegou certo e se o preview apareceu.
+
+✅ Concluído e testado.
+
+## 10. Compartilhar assunto, tempo real e offline (Fase 7)
+
+**1. Banco:** SQL Editor → cole `supabase/migrations/003_tempo_real_nao_lidas.sql` → **Run**.
+
+**2. Publicar:**
+
+```bash
+cd ~/Web/mav/notes
+git add -A
+git commit -m "Fase 7: compartilhar assunto, tempo real, não lidas e offline"
+git push
+```
+
+No celular: ⚙️ → **Procurar atualização** (ou feche e abra o app).
+
+**3. Teste com ela** (ela precisa ter entrado no app pelo menos uma vez):
+
+1. No seu celular, **toque longo num assunto** (ou ⋮ dentro dele) → **👥 Compartilhar** → **Adicionar** ao lado do nome dela.
+2. No celular dela, o assunto aparece sozinho na lista (com 👥) — sem precisar recarregar.
+3. Ela manda uma mensagem: **com o assunto aberto**, aparece na hora na sua tela; **com ele fechado**, aparece o contador verde na lista. Ao abrir, o contador zera.
+4. Ela consegue editar/apagar só as mensagens dela. Você, como dono, pode apagar qualquer uma.
+5. Para tirar alguém: 👥 Compartilhar → **Remover** (pede um segundo toque). Ela também pode sair por conta própria (toque longo → **Sair do assunto**).
+
+**4. Teste offline:**
+
+1. Abra um assunto com internet (assim ele fica guardado no aparelho).
+2. Ligue o **modo avião** → aparece o aviso "Sem internet" no topo.
+3. Escreva e envie uma mensagem com um link: ela aparece com 🕓. Apague ou edite outra.
+4. Feche e abra o app ainda no modo avião: os assuntos e as mensagens continuam lá.
+5. Desligue o modo avião: o 🕓 some, o preview do link aparece, e no computador tudo chega igual.
+
+> Sem internet não dá para: criar/renomear/arquivar assuntos, mover mensagens e compartilhar. O app avisa.
+
+Me conte como foi — principalmente o tempo real entre os dois celulares.
 
 ---
 

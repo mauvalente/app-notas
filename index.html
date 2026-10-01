@@ -166,6 +166,7 @@
     <form method="dialog" class="menu">
       <h2 id="menu-titulo"></h2>
       <button id="menu-fixar" class="item-menu" type="button"></button>
+      <button id="menu-compartilhar" class="item-menu" type="button">👥 Compartilhar</button>
       <button id="menu-editar" class="item-menu" type="button">✏️ Renomear / emoji</button>
       <button id="menu-arquivar" class="item-menu" type="button"></button>
       <button id="menu-excluir" class="item-menu perigo" type="button">🗑️ Excluir assunto</button>
@@ -189,6 +190,23 @@
     </form>
   </dialog>
 
+  <!-- ============ Compartilhar assunto ============ -->
+  <dialog id="dlg-compartilhar" class="folha">
+    <form method="dialog">
+      <h2 id="compartilhar-titulo">Compartilhar</h2>
+      <p class="rotulo">Quem participa</p>
+      <ul id="compartilhar-membros" class="lista-simples arquivados"></ul>
+      <div id="compartilhar-adicionar">
+        <p class="rotulo">Adicionar</p>
+        <ul id="compartilhar-candidatos" class="lista-simples arquivados"></ul>
+        <p id="compartilhar-ninguem" class="vazio pequeno" hidden>Todos os e-mails liberados já participam.</p>
+        <p class="dica">A pessoa precisa ter entrado no app pelo menos uma vez. Ela pode escrever, editar e apagar as próprias mensagens, e pode sair do assunto quando quiser.</p>
+      </div>
+      <p id="compartilhar-erro" class="login-erro" hidden></p>
+      <button class="botao secundario" value="fechar">Fechar</button>
+    </form>
+  </dialog>
+
   <!-- ============ Mover mensagens ============ -->
   <dialog id="dlg-mover" class="folha">
     <form method="dialog">
@@ -208,6 +226,8 @@
       <button class="botao secundario" value="fechar">Fechar</button>
     </form>
   </dialog>
+
+  <div id="aviso-offline" class="aviso-offline" role="status" hidden>Sem internet · mostrando o que está salvo no aparelho</div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 

@@ -23,12 +23,28 @@ function expirouPorDesuso() {
 
 /** Sessão salva no aparelho, ou null. Aplica a regra dos 180 dias. */
 export async function sessaoAtual() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  let session = data?.session;
   limparUrlDeRetorno();
+  // Sem internet e com o token vencido, o supabase-js não consegue renová-lo, mas a sessão
+  // continua guardada: o app abre com o cache e renova quando a conexão voltar.
+  if (!session && (!navigator.onLine || error?.name === 'AuthRetryableFetchError')) session = sessaoGuardada();
   if (!session) return null;
   if (expirouPorDesuso()) { await sair(); return null; }
   marcarUso();
   return session;
+}
+
+function sessaoGuardada() {
+  try {
+    const s = JSON.parse(localStorage.getItem('notas-auth') || 'null');
+    return s?.user?.id && s.refresh_token ? { ...s, offline: true } : null;
+  } catch { return null; }
+}
+
+/** Tenta renovar a sessão (ao voltar a internet). */
+export async function renovarSessao() {
+  try { await supabase.auth.getSession(); } catch { /* ok */ }
 }
 
 /** O e-mail logado está em usuarios_permitidos? */

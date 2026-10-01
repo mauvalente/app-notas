@@ -48,17 +48,17 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [ ] **T5.3** Reduzir as thumbs (no máximo 600 px, WebP) para economizar Storage
 - [x] ~~**T5.5** App na Meta + oEmbed oficial do Instagram~~ — descartada: fica o card leve
 
-## Fase 6 — Receber compartilhamentos — pronta; publicar e testar (README, passo 9)
+## Fase 6 — Receber compartilhamentos — pronta e testada (Android e iPhone)
 - [x] ⭐ **T6.1** `share_target` no manifest (abre `./?title&text&url`) e o app extrai a URL de `text`
 - [x] ⭐ **T6.2** Tela "Salvar em…": escolher ou criar o assunto e abrir a conversa com o texto e o preview prontos
 - [x] ⭐ **T6.3** Atalho do iOS "Salvar no Notas" + instruções de instalação no README
 
-## Fase 7 — Sincronização, offline e compartilhamento
-- [ ] **T7.1** Cache em IndexedDB e sync incremental (o que mudou desde o último sync)
-- [ ] **T7.2** Fila de envio offline ("aguardando envio"); preview buscado quando a conexão voltar
-- [ ] **T7.3** Compartilhar um assunto com a outra pessoa (UI da RPC); ícone 👥; "Sair do assunto" para quem não é dono; a exclusão pelo dono remove o assunto para todos
-- [ ] **T7.4** Supabase Realtime nos assuntos compartilhados
-- [ ] **T7.5** Contador de não lidas (`lido_ate`)
+## Fase 7 — Sincronização, offline e compartilhamento — pronta; publicar e testar (README, passo 10)
+- [x] **T7.1** Cache em IndexedDB e sync incremental (o que mudou desde o último sync)
+- [x] **T7.2** Fila de envio offline ("aguardando envio"); preview buscado quando a conexão voltar
+- [x] **T7.3** Compartilhar um assunto com a outra pessoa (UI da RPC); ícone 👥; "Sair do assunto" para quem não é dono; a exclusão pelo dono remove o assunto para todos
+- [x] **T7.4** Supabase Realtime nos assuntos compartilhados
+- [x] **T7.5** Contador de não lidas (`lido_ate`)
 
 ## Fase 8 — Busca e acabamento
 - [ ] **T8.1** Busca geral (full-text) e dentro da conversa, com salto até a mensagem destacada

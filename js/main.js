@@ -1,17 +1,20 @@
 // Notas — inicialização, login, lista de assuntos e rotas.
 import { supabase, configOk } from './db.js';
-import { sessaoAtual, temAcesso, nomeDe, sair, marcarUso, prepararBotaoGoogle, entrarPorRedirecionamento } from './auth.js';
+import { sessaoAtual, temAcesso, nomeDe, sair, marcarUso, prepararBotaoGoogle, entrarPorRedirecionamento, renovarSessao } from './auth.js';
 import { $, el, toast, mensagemDe, tempo, normalizar, quando, confirmarComSegundoToque } from './util.js';
 import { textoSimples } from './formatar.js';
-import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, preencherAoAbrir } from './conversa.js';
+import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, preencherAoAbrir, receberMensagem } from './conversa.js';
+import { abrirBanco, apagarBanco, kvLer, kvGravar } from './store.js';
+import { processarFila, erroDeRede } from './sync.js';
 
-export const VERSAO = '0.3.0';
+export const VERSAO = '0.4.0';
 
 const estado = {
   usuario: null,        // { id, email, nome }
   todos: [],            // todos os assuntos (inclui arquivados)
   assuntos: [],         // visíveis na lista, já ordenados
   ultimas: new Map(),   // categoria_id → { texto, titulo, criado_em }
+  naoLidas: new Map(),  // categoria_id → quantidade
   filtro: '',
 };
 
@@ -42,22 +45,31 @@ async function iniciar() {
 }
 
 async function entrou(sessao) {
-  let permitido = false;
-  try { permitido = await temAcesso(); } catch (e) { console.error(e); }
+  const u = sessao.user;
+  await abrirBanco(u.id);
+  const perfil = await kvLer('perfil');
+  let permitido = null;
+  try { permitido = await temAcesso(); } catch (e) { if (!erroDeRede(e)) console.error(e); }
+  if (permitido === null) permitido = perfil?.permitido === true; // sem internet: vale o último resultado
   if (!permitido) {
-    const email = sessao.user.email;
     await sair();
-    mostrarLogin(`O e-mail ${email} não tem acesso a este app.`);
+    mostrarLogin(`O e-mail ${u.email} não tem acesso a este app.`);
     return;
   }
-  estado.usuario = { id: sessao.user.id, email: sessao.user.email, nome: await nomeDe(sessao.user.email) };
+  const nome = navigator.onLine ? await nomeDe(u.email) : (perfil?.nome || u.email);
+  kvGravar('perfil', { permitido: true, nome });
+  estado.usuario = { id: u.id, email: u.email, nome };
   mostrarApp();
+  processarFila();
+  assinarTempoReal();
 }
 
 supabase?.auth.onAuthStateChange((evento) => {
   if (evento === 'SIGNED_OUT' && estado.usuario) {
     estado.usuario = null;
+    canal?.unsubscribe(); canal = null;
     fecharConversa();
+    apagarBanco(); // o cache deste aparelho sai junto com a conta
     mostrarLogin();
   }
 });
@@ -65,8 +77,58 @@ supabase?.auth.onAuthStateChange((evento) => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !estado.usuario) return;
   marcarUso();
+  processarFila();
   carregarAssuntos(); // pega o que mudou em outro aparelho
+  if (idDaRota()) marcarLido(idDaRota());
 });
+
+/* ---------- Sem internet ---------- */
+
+function atualizarOffline() {
+  $('aviso-offline').hidden = navigator.onLine;
+  document.body.classList.toggle('offline', !navigator.onLine);
+}
+window.addEventListener('offline', atualizarOffline);
+window.addEventListener('online', async () => {
+  atualizarOffline();
+  if (!estado.usuario) return;
+  await renovarSessao();
+  processarFila();
+  carregarAssuntos();
+  assinarTempoReal();
+});
+atualizarOffline();
+
+/* ---------- Tempo real ---------- */
+
+let canal = null;
+let timerRecarga = null;
+const recarregarEmBreve = () => { clearTimeout(timerRecarga); timerRecarga = setTimeout(carregarAssuntos, 600); };
+
+function assinarTempoReal() {
+  if (!estado.usuario || !navigator.onLine) return;
+  canal?.unsubscribe();
+  canal = supabase.channel('notas-' + estado.usuario.id)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'mensagens' }, (p) => {
+      if (p.new && p.new.id) receberMensagem(p.new);
+      recarregarEmBreve();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias' }, recarregarEmBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'categoria_membros' }, recarregarEmBreve)
+    .subscribe();
+}
+
+/* ---------- Lido / não lidas ---------- */
+
+const ultimoMarcado = new Map();
+async function marcarLido(id) {
+  if (!estado.usuario) return;
+  if (estado.naoLidas.delete(id)) desenharLista();
+  if (Date.now() - (ultimoMarcado.get(id) || 0) < 3000) return;
+  ultimoMarcado.set(id, Date.now());
+  await supabase.from('categoria_membros').update({ lido_ate: new Date().toISOString() })
+    .eq('categoria_id', id).eq('usuario_id', estado.usuario.id);
+}
 
 /* ============================================================
    Login
@@ -112,6 +174,7 @@ configurarConversa({
     ordenarEDesenhar();
   },
   aoMoverOuApagar() { carregarAssuntos(); },
+  marcarLido: (id) => marcarLido(id),
 });
 
 async function mostrarApp() {
@@ -210,18 +273,42 @@ let carregando = null;
 function carregarAssuntos() {
   carregando ??= (async () => {
     try {
-      const [cats, minhas, ultimas] = await Promise.all([
+      const [cats, minhas, ultimas, naoLidas] = await Promise.all([
         supabase.from('categorias').select('id, nome, emoji, cor, dono_id, ultima_msg_em, criado_em'),
-        supabase.from('categoria_membros').select('categoria_id, papel, fixada, arquivada').eq('usuario_id', estado.usuario.id),
+        supabase.from('categoria_membros').select('categoria_id, usuario_id, papel, fixada, arquivada'),
         supabase.rpc('ultimas_mensagens'),
+        supabase.rpc('nao_lidas'),
       ]);
       if (cats.error || minhas.error) {
-        toast('Não consegui carregar os assuntos. ' + mensagemDe(cats.error || minhas.error));
+        const erro = cats.error || minhas.error;
+        if (erroDeRede(erro)) {
+          // sem internet: mostra o que ficou guardado no aparelho
+          if (!estado.todos.length) {
+            const guardado = await kvLer('assuntos');
+            if (guardado) {
+              estado.todos = guardado.todos;
+              estado.ultimas = new Map(guardado.ultimas);
+              estado.naoLidas = new Map(guardado.naoLidas || []);
+              for (const id of guardado.comMembros || []) comMembros.add(id);
+              ordenarEDesenhar();
+            }
+          }
+        } else {
+          toast('Não consegui carregar os assuntos. ' + mensagemDe(erro));
+        }
         return;
       }
-      const porId = new Map(minhas.data.map(m => [m.categoria_id, m]));
+      const minhasLinhas = minhas.data.filter(x => x.usuario_id === estado.usuario.id);
+      comMembros.clear();
+      for (const x of minhas.data) if (x.usuario_id !== estado.usuario.id) comMembros.add(x.categoria_id);
+      const porId = new Map(minhasLinhas.map(m => [m.categoria_id, m]));
       estado.todos = cats.data.map(c => ({ ...c, ...(porId.get(c.id) || {}) }));
-      if (!ultimas.error) estado.ultimas = new Map((ultimas.data || []).map(u => [u.categoria_id, u]));
+      if (!ultimas.error && Array.isArray(ultimas.data)) estado.ultimas = new Map(ultimas.data.map(u => [u.categoria_id, u]));
+      if (!naoLidas.error && Array.isArray(naoLidas.data)) {
+        estado.naoLidas = new Map(naoLidas.data.map(n => [n.categoria_id, n.qtd]));
+        if (idDaRota()) estado.naoLidas.delete(idDaRota());
+      }
+      kvGravar('assuntos', { todos: estado.todos, ultimas: [...estado.ultimas], naoLidas: [...estado.naoLidas], comMembros: [...comMembros] });
       ordenarEDesenhar();
       // o assunto aberto pode ter sido apagado/abandonado em outro aparelho
       if (idDaRota() && !estado.todos.some(a => a.id === idDaRota())) aplicarRota();
@@ -243,6 +330,10 @@ function ordenarEDesenhar() {
 
 function avatarDe(a) { return a.emoji || a.nome.trim().charAt(0); }
 
+/** Assunto com mais de uma pessoa (sou editor, ou sou dono e chamei alguém). */
+const comMembros = new Set();
+function temOutros(a) { return a.papel === 'editor' || comMembros.has(a.id); }
+
 function desenharLista() {
   const ul = $('lista-assuntos');
   const f = normalizar(estado.filtro);
@@ -260,9 +351,11 @@ function desenharLista() {
       el('span', { className: 'avatar' }, avatarDe(a)),
       el('div', { className: 'assunto-corpo' },
         el('div', { className: 'assunto-topo' },
-          el('span', { className: 'assunto-nome' }, (a.fixada ? '📌 ' : '') + a.nome + (a.papel === 'editor' ? ' 👥' : '')),
-          el('span', { className: 'assunto-hora' }, quando(u?.criado_em || a.ultima_msg_em))),
-        el('div', { className: 'assunto-previa' }, previa)));
+          el('span', { className: 'assunto-nome' }, (a.fixada ? '📌 ' : '') + a.nome + (temOutros(a) ? ' 👥' : '')),
+          el('span', { className: 'assunto-hora' + (estado.naoLidas.get(a.id) ? ' com-nao-lidas' : '') }, quando(u?.criado_em || a.ultima_msg_em))),
+        el('div', { className: 'assunto-baixo' },
+          el('div', { className: 'assunto-previa' }, previa),
+          estado.naoLidas.get(a.id) ? el('span', { className: 'nao-lidas' }, String(estado.naoLidas.get(a.id))) : null)));
   }));
 
   $('lista-vazia').hidden = estado.assuntos.length > 0;
@@ -325,6 +418,7 @@ function abrirMenuAssunto(id) {
   $('menu-fixar').textContent = a.fixada ? '📌 Desafixar' : '📌 Fixar no topo';
   $('menu-arquivar').textContent = a.arquivada ? '📂 Desarquivar' : '🗃️ Arquivar';
   $('menu-editar').hidden = !dono;
+  $('menu-compartilhar').textContent = dono ? '👥 Compartilhar' : '👥 Participantes';
   $('menu-excluir').hidden = !dono;
   $('menu-sair').hidden = dono;
   for (const b of [$('menu-excluir'), $('menu-sair')]) {
@@ -335,7 +429,14 @@ function abrirMenuAssunto(id) {
   $('dlg-menu').showModal();
 }
 
+function precisaInternet() {
+  if (navigator.onLine) return false;
+  toast('Isso precisa de internet.');
+  return true;
+}
+
 async function atualizarMinhaParticipacao(campos) {
+  if (precisaInternet()) { $('dlg-menu').close(); return; }
   const a = assuntoDoMenu;
   $('dlg-menu').close();
   Object.assign(a, campos);
@@ -345,6 +446,11 @@ async function atualizarMinhaParticipacao(campos) {
     .eq('categoria_id', a.id).eq('usuario_id', estado.usuario.id);
   if (error) { toast('Não deu para salvar. ' + mensagemDe(error)); carregarAssuntos(); }
 }
+
+$('menu-compartilhar').addEventListener('click', () => {
+  $('dlg-menu').close();
+  abrirCompartilhar(assuntoDoMenu);
+});
 
 $('menu-fixar').addEventListener('click', () => atualizarMinhaParticipacao({ fixada: !assuntoDoMenu.fixada }));
 
@@ -401,7 +507,7 @@ function abrirFormAssunto(a = null) {
   setTimeout(() => $('assunto-nome').focus(), 50);
 }
 
-$('btn-novo-assunto').addEventListener('click', () => abrirFormAssunto());
+$('btn-novo-assunto').addEventListener('click', () => { if (!precisaInternet()) abrirFormAssunto(); });
 
 $('form-assunto').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'criar') return; // Cancelar fecha normalmente
@@ -428,6 +534,60 @@ $('form-assunto').addEventListener('submit', async (e) => {
   if (editando) aplicarRota();
   else abrirAssunto(id);
 });
+
+/* ---------- Compartilhar assunto ---------- */
+
+let assuntoCompartilhado = null;
+
+async function abrirCompartilhar(a) {
+  if (precisaInternet()) return;
+  assuntoCompartilhado = a;
+  const dono = a.dono_id === estado.usuario.id;
+  $('compartilhar-titulo').textContent = (dono ? 'Compartilhar ' : 'Participantes de ') + '“' + a.nome + '”';
+  $('compartilhar-adicionar').hidden = !dono;
+  $('compartilhar-erro').hidden = true;
+  $('dlg-compartilhar').showModal();
+  await desenharCompartilhar();
+}
+
+async function desenharCompartilhar() {
+  const a = assuntoCompartilhado;
+  const dono = a.dono_id === estado.usuario.id;
+  const [membros, permitidos] = await Promise.all([
+    supabase.rpc('membros_da_categoria', { p_categoria: a.id }),
+    dono ? supabase.from('usuarios_permitidos').select('email, nome') : Promise.resolve({ data: [] }),
+  ]);
+  const lista = membros.data || [];
+  $('compartilhar-membros').replaceChildren(...lista.map(p => el('li', {},
+    el('span', { className: 'avatar' }, (p.nome || p.email).trim().charAt(0)),
+    el('span', { className: 'arq-nome' }, (p.usuario_id === estado.usuario.id ? 'Você' : p.nome) + (p.papel === 'dono' ? ' · dono' : '')),
+    dono && p.papel !== 'dono'
+      ? el('button', { type: 'button', className: 'botao', onclick: (e) => confirmarComSegundoToque(e.currentTarget, 'Remover?', () => alterarMembro('remover', p)) }, 'Remover')
+      : null)));
+  const emails = new Set(lista.map(p => (p.email || '').toLowerCase()));
+  const candidatos = (permitidos.data || []).filter(p => !emails.has(p.email.toLowerCase()));
+  $('compartilhar-candidatos').replaceChildren(...candidatos.map(p => el('li', {},
+    el('span', { className: 'avatar' }, p.nome.trim().charAt(0)),
+    el('span', { className: 'arq-nome' }, p.nome),
+    el('button', { type: 'button', className: 'botao primario', onclick: () => alterarMembro('adicionar', p) }, 'Adicionar'))));
+  $('compartilhar-ninguem').hidden = candidatos.length > 0;
+}
+
+async function alterarMembro(acao, p) {
+  const a = assuntoCompartilhado;
+  const { error } = acao === 'adicionar'
+    ? await supabase.rpc('compartilhar_categoria', { p_categoria: a.id, p_email: p.email })
+    : await supabase.rpc('remover_membro', { p_categoria: a.id, p_usuario: p.usuario_id });
+  if (error) {
+    $('compartilhar-erro').textContent = mensagemDe(error);
+    $('compartilhar-erro').hidden = false;
+    return;
+  }
+  $('compartilhar-erro').hidden = true;
+  toast(acao === 'adicionar' ? `${p.nome} agora vê “${a.nome}”.` : `${p.nome} saiu de “${a.nome}”.`);
+  await desenharCompartilhar();
+  carregarAssuntos();
+}
 
 /* ---------- Arquivados (na ⚙️) ---------- */
 
@@ -471,7 +631,7 @@ function aplicarRota() {
   $('conversa-nenhuma').hidden = !!assunto;
 
   if (assunto) {
-    $('conversa-titulo').textContent = assunto.nome + (assunto.papel === 'editor' ? ' 👥' : '');
+    $('conversa-titulo').textContent = assunto.nome + (temOutros(assunto) ? ' 👥' : '');
     $('conversa-avatar').textContent = avatarDe(assunto);
     assuntoAtualizado(assunto);
     abrirConversa(assunto);
