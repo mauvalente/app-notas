@@ -9,13 +9,17 @@ Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREF
 | Arquivo | O que é |
 |---|---|
 | `index.html`, `css/app.css` | Telas do app: login, lista de assuntos, conversa, configurações |
-| `js/main.js` | Inicialização, telas e rotas (`#/` lista, `#/c/<id>` conversa) |
+| `js/main.js` | Inicialização, lista de assuntos, menu do assunto e rotas (`#/` lista, `#/c/<id>` conversa) |
+| `js/conversa.js` | Mensagens, campo de digitar, preview de links, seleção, editar, excluir, copiar e mover |
+| `js/formatar.js`, `js/preview.js`, `js/util.js` | Negrito/itálico/links, chamadas ao preview e às thumbs, utilitários |
 | `js/auth.js` | Login Google → Supabase, plano B por redirecionamento, regra dos 180 dias |
 | `js/db.js`, `js/vendor/supabase.js` | Cliente do Supabase (biblioteca guardada no próprio repositório, sem depender de CDN) |
 | `config.js` | Endereços e chaves públicas: Supabase e Google |
 | `manifest.webmanifest`, `icons/` | Instalação na tela inicial |
 | `sw.js` | Service worker: abre rápido e funciona offline. Ao publicar mudanças, aumente `CACHE = 'notas-vN'` |
 | `supabase/migrations/001_schema.sql` | Tabelas, regras de acesso (RLS), funções e o bucket das thumbs |
+| `supabase/migrations/002_ultimas_mensagens.sql` | Prévia da última mensagem de cada assunto na lista |
+| `supabase/functions/link-preview/index.ts` | Edge Function que lê título, descrição e imagem dos links e guarda a thumb |
 | `.github/workflows/backup.yml` | Backup semanal do banco + ping para o Supabase não pausar |
 
 ---
@@ -155,7 +159,46 @@ Em um ou dois minutos:
 4. Faça um teste com um e-mail que **não** está na lista: deve aparecer "O e-mail … não tem acesso a este app".
 5. Na ⚙️: **Sair desta conta** pede um segundo toque e volta para o login.
 
-Me conte o que funcionou e o que não funcionou (de preferência com print). Aí seguimos para a **Fase 4** (mensagens).
+✅ Concluído em 01/10/2026 (computador, Android e iPhone).
+
+## 8. Mensagens e preview de links (Fases 4 e 5)
+
+**1. Banco:** no Supabase, **SQL Editor → New query**, cole `supabase/migrations/002_ultimas_mensagens.sql` → **Run**.
+
+**2. Edge Function** (é ela que busca o título e a thumb dos links):
+
+1. No Supabase: **Edge Functions → Deploy a new function → Via Editor**.
+2. Nome: **`link-preview`** (exatamente assim).
+3. Apague o exemplo, cole o conteúdo inteiro de `supabase/functions/link-preview/index.ts` → **Deploy function**.
+4. Na função criada, aba **Details** (ou *Settings*): **desligue "Verify JWT with legacy secret"** (ou "Enforce JWT verification") e salve. A própria função confere o login e a lista de e-mails; com a verificação antiga ligada, os projetos novos recusam o pedido.
+
+> Alternativa pelo terminal (opcional): `npx supabase login` e depois `npx supabase functions deploy link-preview --no-verify-jwt --project-ref SEU-ID`.
+
+**3. Publicar o app:**
+
+```bash
+cd ~/Web/mav/notes
+git add -A
+git commit -m "Fases 4 e 5: mensagens, preview de links, seleção, editar e excluir"
+git push
+```
+
+No celular, se o app não mudar sozinho: ⚙️ → **Procurar atualização** (ou feche e abra de novo).
+
+**4. Roteiro de teste:**
+
+1. Abra um assunto e envie um texto com `*negrito*`, `_itálico_` e `~riscado~`.
+2. Cole um link do **YouTube**: o campo deve mostrar o card com a thumb em 1 ou 2 segundos. Envie e toque na bolha: deve abrir o vídeo.
+3. Repita com um link de **notícia/site comum** e um do **Instagram** (pelo botão Compartilhar → Copiar link). No Instagram, o card pode vir "leve" (sem thumb) — combinado.
+4. Cole um link e toque no **✕** do preview: a mensagem vai sem card.
+5. **Toque longo** numa mensagem → barra de seleção. Toque em outras para marcar mais.
+   - Com 1 selecionada: **✏️ Editar** → o texto desce para o campo → altere → **✓**. A bolha mostra "editada".
+   - Com 2 ou mais: o ✏️ fica apagado. **🗑️** pede um segundo toque ("Excluir N?").
+   - **📋 Copiar** e **↪️ Mover** para outro assunto.
+   - O **voltar** do Android sai da seleção sem sair da conversa.
+6. Na lista, **toque longo num assunto** (ou ⋮ dentro da conversa): fixar, renomear/emoji, arquivar, excluir. Os arquivados ficam em ⚙️ → *Assuntos arquivados*.
+
+Me conte o que funcionou e o que não funcionou (de preferência com print). Se algum link não gerar preview, mande o link para eu ver.
 
 ---
 

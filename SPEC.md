@@ -323,6 +323,7 @@ notes/                      (repositório app-notas)
 ├── icons/
 ├── supabase/
 │   ├── migrations/001_schema.sql   tabelas, índices, RLS, funções e triggers
+│   ├── migrations/002_ultimas_mensagens.sql   prévia da última mensagem na lista
 │   └── functions/link-preview/index.ts
 ├── .github/workflows/backup.yml     backup semanal + keep-alive
 ├── README.md               passo a passo de instalação, no estilo do Contas
