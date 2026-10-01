@@ -5,6 +5,7 @@ import { formatar, primeiraUrl, urlSegura, envolverSelecao } from './formatar.js
 import { buscarPreview, paraMensagem, previewLeve, urlDaThumb } from './preview.js';
 import { mensagensDoAssunto, guardarPaginaNova, guardarMensagens, removerMensagens, kvLer, kvGravar, filaTodas } from './store.js';
 import { gravar, aoProcessar, erroDeRede } from './sync.js';
+import { buscarMensagens, itemResultado } from './busca.js';
 
 const POR_PAGINA = 50;
 
@@ -19,6 +20,8 @@ const c = {
   editando: null,         // mensagem em edição
   rascunhoAntesDeEditar: '',
   preview: null,          // { url, estado: 'carregando'|'ok', dados, promessa }
+  pronto: false,          // terminou de carregar (cache + servidor)
+  ancorado: false,        // pulou para uma mensagem da busca: não rolar para o fim sozinho
   descartada: null,       // URL cujo preview foi removido com ✕
 };
 
@@ -42,6 +45,8 @@ export async function abrirConversa(assunto) {
   c.mensagens = [];
   c.membros = new Map();
   c.temMais = false;
+  c.pronto = false;
+  c.ancorado = false;
 
   ta.disabled = false;
   ta.value = guardado.ler(chaveRascunho(), '');
@@ -75,6 +80,7 @@ export async function abrirConversa(assunto) {
         ? 'Sem internet e nada guardado neste aparelho para este assunto ainda.'
         : 'Não consegui carregar as mensagens. ' + mensagemDe(msgs.error)));
     }
+    terminouDeAbrir();
     return;
   }
   // o que ainda está na fila (apagado/editado sem internet) vale mais que o servidor
@@ -92,6 +98,50 @@ export async function abrirConversa(assunto) {
   desenhar();
   if (!doCache.length || estavaNoFim) rolarParaFim();
   if (temMouse()) ta.focus();
+  terminouDeAbrir();
+}
+
+/* ---------- Pular para uma mensagem (resultado de busca) ---------- */
+
+let irParaPendente = null;
+
+export function irParaMensagem(id, criadoEm, categoriaId) {
+  if (c.assunto?.id === categoriaId && c.pronto) return irPara(id, criadoEm);
+  irParaPendente = { id, criadoEm };
+}
+
+function terminouDeAbrir() {
+  c.pronto = true;
+  if (irParaPendente) { const p = irParaPendente; irParaPendente = null; irPara(p.id, p.criadoEm); }
+}
+
+async function irPara(id, criadoEm) {
+  if (!c.mensagens.some(m => m.id === id) && navigator.onLine && c.assunto) {
+    // mensagem antiga, fora do que está carregado: carrega dela até hoje
+    const catId = c.assunto.id;
+    const { data, error } = await supabase.from('mensagens')
+      .select('id, categoria_id, autor_id, texto, link, criado_em, editado_em')
+      .eq('categoria_id', catId).is('apagado_em', null)
+      .gte('criado_em', criadoEm).order('criado_em', { ascending: true }).limit(1000);
+    if (!error && c.assunto?.id === catId) {
+      const pend = c.mensagens.filter(m => m._pendente && !data.some(d => d.id === m.id));
+      c.mensagens = [...data, ...pend];
+      c.temMais = true;
+      guardarMensagens(data);
+      desenhar();
+    }
+  }
+  const no = lista.querySelector(`.msg[data-id="${CSS.escape(id)}"]`);
+  if (!no) { toast('Não encontrei essa mensagem aqui.'); return; }
+  c.ancorado = true;
+  c.destacada = id;            // sobrevive a redesenhos (ex.: carregar mais antigas ao rolar)
+  no.scrollIntoView({ block: 'center' });
+  no.classList.add('destaque');
+  setTimeout(() => {
+    if (c.destacada !== id) return;
+    c.destacada = null;
+    lista.querySelector('.msg.destaque')?.classList.remove('destaque');
+  }, 2500);
 }
 
 /* ============================================================
@@ -148,6 +198,7 @@ aoProcessar(({ op, ok, erro }) => {
 });
 
 export function fecharConversa() {
+  fecharBusca(false);
   if (!c.assunto) return;
   if (!c.editando) guardado.gravar(chaveRascunho(), ta.value);
   limparSelecao();
@@ -229,7 +280,7 @@ function desenharMensagem(m) {
   ));
 
   return el('div', {
-    className: 'msg ' + (minha ? 'minha' : 'outra') + (c.selecionadas.has(m.id) ? ' selecionada' : ''),
+    className: 'msg ' + (minha ? 'minha' : 'outra') + (c.selecionadas.has(m.id) ? ' selecionada' : '') + (c.destacada === m.id ? ' destaque' : ''),
     dataset: { id: m.id },
   }, bolha);
 }
@@ -261,7 +312,7 @@ function carregarThumbs(raiz) {
   raiz.querySelectorAll('img[data-thumb]:not([src])').forEach(img => {
     urlDaThumb(img.dataset.thumb)
       .then(u => {
-        const noFim = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;
+        const noFim = !c.ancorado && lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;
         img.addEventListener('load', () => { if (noFim) rolarParaFim(); }, { once: true });
         img.src = u;
       })
@@ -282,6 +333,7 @@ lista.addEventListener('scroll', async () => {
   c.carregandoMais = false;
   if (error || c.assunto?.id !== id) return;
   const alturaAntes = lista.scrollHeight;
+  guardarMensagens(data);
   c.mensagens = data.reverse().concat(c.mensagens);
   c.temMais = data.length === POR_PAGINA;
   desenhar();
@@ -626,6 +678,7 @@ async function enviarNova(texto, link) {
     _pendente: true,
   };
   // aparece na hora (com 🕓 até o servidor confirmar); o campo é limpo
+  c.ancorado = false;
   c.mensagens.push(msg);
   ta.value = '';
   c.preview = null; c.descartada = null;
@@ -661,3 +714,67 @@ function cancelarEdicaoVisual() {
   detectarLink(true);
   ajustarAltura();
 }
+
+/* ============================================================
+   Buscar nesta conversa
+   ============================================================ */
+
+let buscaAberta = false;
+let timerBusca;
+
+$('btn-buscar-conversa').addEventListener('click', () => {
+  if (!c.assunto) return;
+  buscaAberta = true;
+  history.pushState({ ...(history.state || {}), busca: true }, '');
+  $('barra-conversa').hidden = true;
+  $('barra-busca').hidden = false;
+  $('busca-conversa-texto').value = '';
+  desenharResultadosConversa([], '');
+  $('busca-conversa-texto').focus();
+});
+
+$('busca-conversa-texto').addEventListener('input', (e) => {
+  clearTimeout(timerBusca);
+  const termo = e.target.value;
+  if (termo.trim().length < 2) { desenharResultadosConversa([], termo); return; }
+  timerBusca = setTimeout(async () => {
+    try {
+      const { itens, offline } = await buscarMensagens(termo, c.assunto?.id);
+      if ($('busca-conversa-texto').value !== termo) return;
+      desenharResultadosConversa(itens, termo, offline);
+    } catch (err) {
+      desenharResultadosConversa([], termo, false, mensagemDe(err));
+    }
+  }, 300);
+});
+
+function desenharResultadosConversa(itens, termo, offline = false, erro = '') {
+  const box = $('busca-conversa-resultados');
+  const ativo = termo.trim().length >= 2;
+  box.hidden = !ativo;
+  if (!ativo) return;
+  $('busca-conversa-lista').replaceChildren(...itens.map(m => itemResultado(m, null, termo, false)));
+  $('busca-conversa-vazio').hidden = itens.length > 0;
+  $('busca-conversa-vazio').textContent = erro || (offline ? 'Nada encontrado no que está guardado neste aparelho.' : 'Nada encontrado.');
+}
+
+$('busca-conversa-lista').addEventListener('click', (e) => {
+  const b = e.target.closest('.resultado');
+  if (!b) return;
+  const { id, criado } = b.dataset;
+  fecharBusca();
+  irPara(id, criado);
+});
+
+function fecharBusca(voltarHistorico = true) {
+  if (!buscaAberta) return;
+  buscaAberta = false;
+  $('barra-busca').hidden = true;
+  $('barra-conversa').hidden = c.selecionadas.size > 0;
+  $('busca-conversa-resultados').hidden = true;
+  if (voltarHistorico && history.state?.busca) history.back();
+}
+
+$('busca-fechar').addEventListener('click', () => fecharBusca());
+window.addEventListener('popstate', () => { if (buscaAberta && !history.state?.busca) fecharBusca(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && buscaAberta) fecharBusca(); });

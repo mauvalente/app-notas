@@ -37,15 +37,15 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [x] ⭐ **T4.7** Editar: só com 1 selecionada, o texto vai para o campo de digitar, faixa "Editando", ✓ atualiza a mesma mensagem
 - [x] ⭐ **T4.8** Excluir 1 ou mais com o segundo toque para confirmar (padrão do Contas), em lote
 - [x] **T4.9** Copiar e mover as mensagens selecionadas
-- [~] **T4.6** Ctrl+B e Ctrl+I prontos; seletor de emoji no computador fica para depois (Windows: tecla Win + . abre o do sistema)
+- [x] **T4.6** Ctrl+B e Ctrl+I prontos; seletor de emoji próprio dispensado (Windows: Win + . / Mac: Ctrl + Cmd + Espaço abrem o do sistema)
 
-## Fase 5 — Preview de links — pronta e testada (falta só T5.3)
+## Fase 5 — Preview de links — pronta e testada
 - [x] ⭐ **T5.1** Edge Function `link-preview`: JWT, normalização de URL, leitura de OG, meta tags e `<title>`, cache em `link_previews`, proteção SSRF e limites
 - [x] ⭐ **T5.2** Baixar a thumb para o bucket `thumbs` + URLs assinadas no app
 - [x] ⭐ **T5.4** Casos especiais: oEmbed do YouTube e do TikTok, X, encurtadores; card "leve" quando o site bloquear
 - [x] ⭐ **T5.6** Preview no campo de digitar: detecção do link com espera, carregando, ✕ para remover, acompanha a edição do texto
 - [x] ⭐ **T5.7** Card na bolha (thumb, título, descrição, domínio), com a bolha inteira clicável
-- [ ] **T5.3** Reduzir as thumbs (no máximo 600 px, WebP) para economizar Storage
+- [x] **T5.3** Reduzir as thumbs (no máximo 600 px, WebP) para economizar Storage
 - [x] ~~**T5.5** App na Meta + oEmbed oficial do Instagram~~ — descartada: fica o card leve
 
 ## Fase 6 — Receber compartilhamentos — pronta e testada (Android e iPhone)
@@ -53,19 +53,19 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [x] ⭐ **T6.2** Tela "Salvar em…": escolher ou criar o assunto e abrir a conversa com o texto e o preview prontos
 - [x] ⭐ **T6.3** Atalho do iOS "Salvar no Notas" + instruções de instalação no README
 
-## Fase 7 — Sincronização, offline e compartilhamento — pronta; publicar e testar (README, passo 10)
+## Fase 7 — Sincronização, offline e compartilhamento — pronta e testada
 - [x] **T7.1** Cache em IndexedDB e sync incremental (o que mudou desde o último sync)
 - [x] **T7.2** Fila de envio offline ("aguardando envio"); preview buscado quando a conexão voltar
 - [x] **T7.3** Compartilhar um assunto com a outra pessoa (UI da RPC); ícone 👥; "Sair do assunto" para quem não é dono; a exclusão pelo dono remove o assunto para todos
 - [x] **T7.4** Supabase Realtime nos assuntos compartilhados
 - [x] **T7.5** Contador de não lidas (`lido_ate`)
 
-## Fase 8 — Busca e acabamento
-- [ ] **T8.1** Busca geral (full-text) e dentro da conversa, com salto até a mensagem destacada
-- [ ] **T8.2** Exportar tudo em JSON (backup)
+## Fase 8 — Busca e acabamento — pronta; publicar e testar (README, passo 11)
+- [x] **T8.1** Busca geral (full-text) e dentro da conversa, com salto até a mensagem destacada
+- [x] **T8.2** Exportar tudo em JSON (backup)
 - [x] **T8.3** GitHub Actions: backup semanal (`pg_dump` num repositório privado) + ping para o Supabase não pausar — rodou OK em 01/10/2026
-- [~] **T8.4** README com o passo a passo de instalação (Fase 0 pronta; completar a cada fase)
-- [ ] **T8.5** Teste em aparelho real: instalar no Android, compartilhar do Instagram, YouTube e TikTok, uso offline, login depois de reinstalar
+- [x] **T8.4** README com o passo a passo de instalação e de cada fase
+- [x] **T8.5** Teste em aparelho real: instalar no Android, compartilhar do Instagram, YouTube e TikTok, uso offline, login depois de reinstalar
 
 ## Ordem sugerida
 0 → 2 → 3 → 1 → 4 → 5 → 6 (MVP pronto) → 7 → 8

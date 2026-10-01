@@ -13,6 +13,7 @@ Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREF
 | `js/conversa.js` | Mensagens, campo de digitar, preview de links, seleção, editar, excluir, copiar e mover |
 | `js/formatar.js`, `js/preview.js`, `js/util.js` | Negrito/itálico/links, chamadas ao preview e às thumbs, utilitários |
 | `js/store.js`, `js/sync.js` | Cache no aparelho (IndexedDB) e fila de envio offline |
+| `js/busca.js` | Busca nas mensagens (servidor ou, sem internet, o cache) |
 | `js/auth.js` | Login Google → Supabase, plano B por redirecionamento, regra dos 180 dias |
 | `js/db.js`, `js/vendor/supabase.js` | Cliente do Supabase (biblioteca guardada no próprio repositório, sem depender de CDN) |
 | `config.js` | Endereços e chaves públicas: Supabase e Google |
@@ -21,6 +22,7 @@ Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREF
 | `supabase/migrations/001_schema.sql` | Tabelas, regras de acesso (RLS), funções e o bucket das thumbs |
 | `supabase/migrations/002_ultimas_mensagens.sql` | Prévia da última mensagem de cada assunto na lista |
 | `supabase/migrations/003_tempo_real_nao_lidas.sql` | Tempo real para assuntos compartilhados + contador de não lidas |
+| `supabase/migrations/004_busca.sql` | Busca sem acento e por pedaço de palavra (texto, título, descrição e endereço do link) |
 | `supabase/functions/link-preview/index.ts` | Edge Function que lê título, descrição e imagem dos links e guarda a thumb |
 | `.github/workflows/backup.yml` | Backup semanal do banco + ping para o Supabase não pausar |
 
@@ -271,7 +273,36 @@ No celular: ⚙️ → **Procurar atualização** (ou feche e abra o app).
 
 > Sem internet não dá para: criar/renomear/arquivar assuntos, mover mensagens e compartilhar. O app avisa.
 
-Me conte como foi — principalmente o tempo real entre os dois celulares.
+✅ Concluído e testado.
+
+## 11. Busca, backup e thumbs menores (Fase 8)
+
+**1. Banco:** SQL Editor → cole `supabase/migrations/004_busca.sql` → **Run**.
+
+**2. Edge Function** (thumbs reduzidas para no máximo 600 px em WebP):
+
+1. Supabase → **Edge Functions** → `link-preview` → aba **Code**.
+2. Apague tudo, cole o conteúdo novo de `supabase/functions/link-preview/index.ts` → **Deploy**.
+3. Confira que **"Verify JWT"** continua **desligado**.
+
+> As thumbs já guardadas continuam como estão; só as novas saem reduzidas.
+
+**3. Publicar:**
+
+```bash
+cd ~/Web/mav/notes
+git add -A
+git commit -m "Fase 8: busca, exportar JSON e thumbs menores"
+git push
+```
+
+**4. Teste:**
+
+1. Na lista, digite no campo **Buscar** um pedaço de palavra, sem acento (ex.: `acuc` acha "açúcar"). Abaixo dos assuntos aparece **Mensagens** com os trechos marcados. Toque num resultado: abre a conversa já na mensagem, que pisca.
+2. Dentro de uma conversa: **🔍** no topo → busca só naquele assunto (também acha pelo título do link).
+3. Sem internet, a busca procura no que está guardado no aparelho (avisa no título).
+4. ⚙️ → **⬇️ Exportar meus dados (JSON)**: baixa `notas-backup-AAAA-MM-DD.json` com todos os assuntos e mensagens.
+5. Envie um link novo com imagem grande e confira que o preview continua aparecendo normal.
 
 ---
 

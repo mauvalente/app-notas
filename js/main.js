@@ -3,11 +3,12 @@ import { supabase, configOk } from './db.js';
 import { sessaoAtual, temAcesso, nomeDe, sair, marcarUso, prepararBotaoGoogle, entrarPorRedirecionamento, renovarSessao } from './auth.js';
 import { $, el, toast, mensagemDe, tempo, normalizar, quando, confirmarComSegundoToque } from './util.js';
 import { textoSimples } from './formatar.js';
-import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, preencherAoAbrir, receberMensagem } from './conversa.js';
+import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, preencherAoAbrir, receberMensagem, irParaMensagem } from './conversa.js';
+import { buscarMensagens, itemResultado } from './busca.js';
 import { abrirBanco, apagarBanco, kvLer, kvGravar } from './store.js';
 import { processarFila, erroDeRede } from './sync.js';
 
-export const VERSAO = '0.4.0';
+export const VERSAO = '1.0.0';
 
 const estado = {
   usuario: null,        // { id, email, nome }
@@ -367,6 +368,39 @@ function desenharLista() {
 $('busca-assuntos').addEventListener('input', (e) => {
   estado.filtro = e.target.value;
   desenharLista();
+  agendarBuscaGlobal();
+});
+
+/* ---------- Busca nas mensagens de todos os assuntos ---------- */
+
+let timerBuscaGlobal;
+function agendarBuscaGlobal() {
+  clearTimeout(timerBuscaGlobal);
+  const termo = estado.filtro.trim();
+  const box = $('resultados-mensagens');
+  if (termo.length < 2) { box.hidden = true; return; }
+  box.hidden = false;
+  $('resultados-titulo').textContent = 'Mensagens · buscando…';
+  timerBuscaGlobal = setTimeout(async () => {
+    let r;
+    try { r = await buscarMensagens(termo); }
+    catch (e) { r = { itens: [], erro: mensagemDe(e) }; }
+    if (estado.filtro.trim() !== termo) return;
+    const porId = new Map(estado.todos.map(a => [a.id, a]));
+    $('resultados-lista').replaceChildren(...r.itens.map(m => itemResultado(m, porId.get(m.categoria_id), termo)));
+    $('resultados-titulo').textContent = r.itens.length
+      ? `Mensagens (${r.itens.length}${r.itens.length === 50 ? '+' : ''})` + (r.offline ? ' · sem internet: só o que está no aparelho' : '')
+      : 'Mensagens';
+    $('resultados-vazio').hidden = r.itens.length > 0;
+    $('resultados-vazio').textContent = r.erro || (r.offline ? 'Nada encontrado no que está guardado neste aparelho.' : 'Nenhuma mensagem encontrada.');
+  }, 300);
+}
+
+$('resultados-lista').addEventListener('click', (e) => {
+  const b = e.target.closest('.resultado');
+  if (!b) return;
+  irParaMensagem(b.dataset.id, b.dataset.criado, b.dataset.categoria);
+  abrirAssunto(b.dataset.categoria);
 });
 
 /* ---------- Toques na lista: abrir e toque longo (menu) ---------- */
@@ -660,6 +694,53 @@ $('btn-sair').addEventListener('click', (e) => {
     $('dlg-config').close();
     await sair();
   });
+});
+
+/* ---------- Exportar tudo (backup em JSON) ---------- */
+
+$('btn-exportar').addEventListener('click', async () => {
+  if (precisaInternet()) return;
+  const b = $('btn-exportar');
+  b.disabled = true;
+  b.textContent = 'Preparando…';
+  try {
+    const cats = await supabase.from('categorias').select('id, nome, emoji, cor, dono_id, criado_em');
+    if (cats.error) throw cats.error;
+    const msgs = [];
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await supabase.from('mensagens')
+        .select('id, categoria_id, autor_id, texto, link, criado_em, editado_em')
+        .is('apagado_em', null).order('criado_em', { ascending: true }).range(de, de + 999);
+      if (error) throw error;
+      msgs.push(...data);
+      if (data.length < 1000) break;
+    }
+    const nomes = new Map();
+    for (const c of cats.data) {
+      const { data } = await supabase.rpc('membros_da_categoria', { p_categoria: c.id });
+      for (const p of data || []) nomes.set(p.usuario_id, p.nome);
+    }
+    const backup = {
+      app: 'Notas', versao: VERSAO, exportado_em: new Date().toISOString(),
+      usuario: { email: estado.usuario.email, nome: estado.usuario.nome },
+      assuntos: cats.data.map(c => ({
+        ...c,
+        dono: nomes.get(c.dono_id) || null,
+        mensagens: msgs.filter(m => m.categoria_id === c.id)
+          .map(({ categoria_id, ...m }) => ({ ...m, autor: nomes.get(m.autor_id) || null })),
+      })),
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: `notas-backup-${new Date().toISOString().slice(0, 10)}.json` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`Backup gerado: ${cats.data.length} assuntos, ${msgs.length} mensagens.`);
+  } catch (e) {
+    toast('Não deu para exportar. ' + mensagemDe(e));
+  } finally {
+    b.disabled = false;
+    b.textContent = '⬇️ Exportar meus dados (JSON)';
+  }
 });
 
 $('btn-atualizar').addEventListener('click', async () => {

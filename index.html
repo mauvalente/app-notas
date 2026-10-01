@@ -47,14 +47,22 @@
 
       <div class="busca-lista">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input id="busca-assuntos" type="search" placeholder="Buscar assunto" autocomplete="off">
+        <input id="busca-assuntos" type="search" placeholder="Buscar assuntos e mensagens" autocomplete="off">
       </div>
 
-      <ul id="lista-assuntos" class="lista-assuntos" role="list"></ul>
+      <div class="lista-rolagem">
+        <ul id="lista-assuntos" class="lista-assuntos" role="list"></ul>
 
-      <div id="lista-vazia" class="vazio" hidden>
-        <p><strong>Nenhum assunto ainda.</strong></p>
-        <p>Toque em ＋ para criar o primeiro.</p>
+        <div id="lista-vazia" class="vazio" hidden>
+          <p><strong>Nenhum assunto ainda.</strong></p>
+          <p>Toque em ＋ para criar o primeiro.</p>
+        </div>
+
+        <section id="resultados-mensagens" class="resultados" hidden>
+          <h3 id="resultados-titulo" class="resultados-titulo">Mensagens</h3>
+          <ul id="resultados-lista" class="lista-resultados"></ul>
+          <p id="resultados-vazio" class="vazio pequeno" hidden></p>
+        </section>
       </div>
 
       <button id="btn-novo-assunto" class="fab" type="button" aria-label="Novo assunto">
@@ -76,9 +84,20 @@
           </button>
           <span id="conversa-avatar" class="avatar"></span>
           <h2 id="conversa-titulo" class="barra-titulo"></h2>
+          <button id="btn-buscar-conversa" class="icone-botao" type="button" aria-label="Buscar nesta conversa">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          </button>
           <button id="btn-menu-conversa" class="icone-botao" type="button" aria-label="Opções do assunto">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
           </button>
+        </header>
+
+        <!-- Barra de busca na conversa (substitui o cabeçalho) -->
+        <header id="barra-busca" class="barra barra-busca" hidden>
+          <button id="busca-fechar" class="icone-botao" type="button" aria-label="Fechar busca">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>
+          </button>
+          <input id="busca-conversa-texto" type="search" placeholder="Buscar nesta conversa" autocomplete="off">
         </header>
 
         <!-- Barra do modo seleção (substitui o cabeçalho) -->
@@ -101,7 +120,13 @@
           </button>
         </header>
 
-        <div id="mensagens" class="mensagens"></div>
+        <div class="area-mensagens">
+          <div id="mensagens" class="mensagens"></div>
+          <div id="busca-conversa-resultados" class="busca-resultados" hidden>
+            <ul id="busca-conversa-lista" class="lista-resultados"></ul>
+            <p id="busca-conversa-vazio" class="vazio pequeno" hidden></p>
+          </div>
+        </div>
 
         <div class="composer-area">
           <div id="composer-editando" class="composer-editando" hidden>
@@ -134,6 +159,7 @@
         </div>
       </div>
       <button id="btn-arquivados" class="botao" type="button" hidden>Assuntos arquivados</button>
+      <button id="btn-exportar" class="botao" type="button">⬇️ Exportar meus dados (JSON)</button>
       <button id="btn-sair" class="botao perigo" type="button">Sair desta conta</button>
       <button id="btn-atualizar" class="botao" type="button">Procurar atualização</button>
       <p class="versao">Versão <span id="versao"></span></p>

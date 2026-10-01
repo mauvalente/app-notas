@@ -5,6 +5,7 @@
 // Só responde para quem está logado E está em usuarios_permitidos.
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { Image, decode } from 'npm:imagescript@1.3.0';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -285,7 +286,10 @@ async function gerarPreview(url: string, admin: Admin): Promise<Preview> {
 
   // Thumb → bucket "thumbs"
   if (imagemOrigem) {
-    try { base.imagem = await guardarImagem(imagemOrigem, admin); }
+    try {
+      const img = await guardarImagem(imagemOrigem, admin);
+      if (img) { base.imagem = img.caminho; base.w = img.w; base.h = img.h; }
+    }
     catch (e) { console.warn('imagem', imagemOrigem, (e as Error)?.message); }
   }
   return base;
@@ -301,17 +305,41 @@ async function buscarJson(url: string): Promise<Record<string, any> | null> {
 
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
 
-async function guardarImagem(origem: string, admin: Admin): Promise<string | null> {
-  const { res } = await buscar(origem, 'image/avif,image/webp,image/*;q=0.8');
-  const tipo = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+const LADO_MAX = 600;     // px (maior lado da thumb guardada)
+
+async function guardarImagem(origem: string, admin: Admin): Promise<{ caminho: string; w: number | null; h: number | null } | null> {
+  const { res } = await buscar(origem, 'image/jpeg,image/png,image/*;q=0.8');
+  let tipo = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (!res.ok || !EXT[tipo]) { await res.body?.cancel(); return null; }
-  const bytes = await lerAte(res, LIMITE_IMAGEM + 1);
+  let bytes: Uint8Array<ArrayBuffer> = await lerAte(res, LIMITE_IMAGEM + 1);
   if (bytes.length > LIMITE_IMAGEM || bytes.length < 200) return null;
+
+  // Reduz para no máximo 600 px em WebP (economiza o Storage gratuito).
+  // Formatos que a biblioteca não lê (WebP/AVIF de origem) são guardados como vieram.
+  let w: number | null = null, h: number | null = null;
+  try {
+    const img = await decode(bytes) as Image;
+    if (img && typeof img.width === 'number') {
+      if (img.width > LADO_MAX || img.height > LADO_MAX) {
+        if (img.width >= img.height) img.resize(LADO_MAX, Image.RESIZE_AUTO);
+        else img.resize(Image.RESIZE_AUTO, LADO_MAX);
+      }
+      const webp = await img.encodeWEBP(72);
+      if (webp.length < bytes.length) {
+        bytes = new Uint8Array(webp);
+        tipo = 'image/webp';
+      }
+      w = img.width; h = img.height;
+    }
+  } catch (e) {
+    console.warn('reduzir imagem', (e as Error)?.message);
+  }
+
   const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(b => b.toString(16).padStart(2, '0')).join('');
   const caminho = `${hash.slice(0, 2)}/${hash}.${EXT[tipo]}`;
   const { error } = await admin.storage.from('thumbs').upload(caminho, bytes, { contentType: tipo, upsert: true });
   if (error) throw error;
-  return caminho;
+  return { caminho, w, h };
 }
 
 /* ---------- HTML ---------- */

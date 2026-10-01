@@ -100,3 +100,11 @@ export const enfileirar = (op) => transacao('fila', 'readwrite', s => s.fila.add
 export const filaTodas = async () => (await transacao('fila', 'readonly', s => s.fila.getAll())) || [];
 export const filaRemover = (seq) => transacao('fila', 'readwrite', s => { s.fila.delete(seq); });
 export const filaAtualizar = (op) => transacao('fila', 'readwrite', s => { s.fila.put(op); });
+
+/** Busca simples nas mensagens guardadas no aparelho (usada sem internet). */
+export async function buscarNoCache(filtro, categoriaId = null) {
+  const todas = await transacao('mensagens', 'readonly', s => categoriaId
+    ? s.mensagens.index('categoria').getAll(categoriaId)
+    : s.mensagens.getAll());
+  return (todas || []).filter(filtro).sort((a, b) => b.criado_em.localeCompare(a.criado_em)).slice(0, 50);
+}

@@ -315,6 +315,7 @@ notes/                      (repositório app-notas)
 │   ├── db.js               cliente Supabase e chamadas
 │   ├── vendor/supabase.js  supabase-js empacotado no repositório (sem depender de CDN)
 │   ├── store.js / sync.js  cache IndexedDB e fila offline
+│   ├── busca.js            busca nas mensagens (servidor/cache)
 │   ├── store.js            IndexedDB, fila de envio e sync
 │   ├── ui-lista.js         lista de assuntos
 │   ├── ui-conversa.js      conversa e bolhas
@@ -326,6 +327,7 @@ notes/                      (repositório app-notas)
 │   ├── migrations/001_schema.sql   tabelas, índices, RLS, funções e triggers
 │   ├── migrations/002_ultimas_mensagens.sql   prévia da última mensagem na lista
 │   ├── migrations/003_tempo_real_nao_lidas.sql   tempo real + não lidas
+│   ├── migrations/004_busca.sql   busca sem acento e por pedaço de palavra
 │   └── functions/link-preview/index.ts
 ├── .github/workflows/backup.yml     backup semanal + keep-alive
 ├── README.md               passo a passo de instalação, no estilo do Contas
