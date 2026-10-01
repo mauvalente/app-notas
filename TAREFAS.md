@@ -3,17 +3,17 @@
 Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP**: login, assuntos, mensagens com preview e receber do botão Compartilhar do Android.
 
 ## Fase 0 — Preparação (passos seus no README)
-- [ ] ⭐ **T0.1** Criar o repositório `mauvalente/app-notas`, ligar o GitHub Pages (branch `main`, raiz) e confirmar a URL `https://mauvalente.github.io/app-notas/`
-- [ ] ⭐ **T0.2** Criar o projeto no Supabase (região São Paulo) e anotar a URL e a anon key
-- [ ] ⭐ **T0.3** Google Cloud: no cliente OAuth do APP de Contas, adicionar as origens `https://mauvalente.github.io` e `http://localhost:8000`
-- [ ] ⭐ **T0.4** Supabase: ativar o provedor Google com o mesmo Client ID
+- [x] ⭐ **T0.1** Criar o repositório `mauvalente/app-notas`, ligar o GitHub Pages (branch `main`, raiz) e confirmar a URL `https://mauvalente.github.io/app-notas/`
+- [ ] ⭐ **T0.2** Criar o projeto no Supabase (região São Paulo) e anotar a URL e a publishable key — o primeiro ficou nos EUA; recriar em São Paulo (README, passo 6)
+- [x] ⭐ **T0.3** Google Cloud: no cliente OAuth do APP de Contas, adicionar as origens `https://mauvalente.github.io` e `http://localhost:8000`
+- [x] ⭐ **T0.4** Supabase: ativar o provedor Google com o mesmo Client ID
 - [x] ⭐ **T0.5** Criar o `config.js` (SPEC 2.1); falta preencher os valores (README, passos 2 e 4)
 - [x] **T0.6** Ícone do app (`icons/`) + página provisória para testar o Pages
 
-## Fase 1 — Casca do PWA
-- [ ] ⭐ **T1.1** `index.html`, `manifest.webmanifest`, ícones e `sw.js` (base do Contas, adaptada para o subcaminho `/app-notas/`)
-- [ ] ⭐ **T1.2** Layout responsivo: duas telas no celular e duas colunas no computador; rotas `#/` e `#/c/<id>`; voltar do Android
-- [ ] **T1.3** Tema claro e escuro
+## Fase 1 — Casca do PWA — pronta; testar no aparelho (README, passo 7)
+- [x] ⭐ **T1.1** `index.html`, `manifest.webmanifest`, ícones e `sw.js` (base do Contas, adaptada para o subcaminho `/app-notas/`)
+- [x] ⭐ **T1.2** Layout responsivo: duas telas no celular e duas colunas no computador; rotas `#/` e `#/c/<id>`; voltar do Android
+- [x] **T1.3** Tema claro e escuro
 
 ## Fase 2 — Banco (Supabase) — SQL pronto; é só rodar (README, passo 3)
 - [x] ⭐ **T2.1** Migration `001_schema.sql`: tabelas e índices (SPEC 4)
@@ -22,14 +22,14 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [x] ⭐ **T2.4** Trigger `ultima_msg_em`; e o dono é inserido em `categoria_membros` ao criar um assunto
 - [x] ⭐ **T2.5** Roteiro de teste do RLS (testado num Postgres local que simula o Supabase; repetir no projeto real depois do login): um e-mail não permitido não vê nada; um editor não apaga o assunto; ninguém lê assunto dos outros
 
-## Fase 3 — Login
-- [ ] ⭐ **T3.1** Botão do Google Identity Services, `signInWithIdToken` com nonce
-- [ ] ⭐ **T3.2** Aviso "Este e-mail não tem acesso" para e-mails fora da lista
+## Fase 3 — Login — pronto; testar (README, passo 7)
+- [x] ⭐ **T3.1** Botão do Google Identity Services, `signInWithIdToken` com nonce
+- [x] ⭐ **T3.2** Aviso "Este e-mail não tem acesso" para e-mails fora da lista
 - [ ] ⭐ **T3.4** Testar o login no iPhone com o app instalado; se o pop-up falhar, fazer o plano B por redirecionamento (SPEC 3.4)
-- [ ] ⭐ **T3.3** Regra dos 180 dias sem uso + **Sair desta conta** na engrenagem
+- [x] ⭐ **T3.3** Regra dos 180 dias sem uso + **Sair desta conta** na engrenagem
 
 ## Fase 4 — Assuntos e mensagens
-- [ ] ⭐ **T4.1** Lista de assuntos: criar, renomear, emoji e cor, fixar, arquivar, excluir; ordem por última mensagem
+- [~] ⭐ **T4.1** Lista de assuntos (já cria e lista; falta renomear, fixar, arquivar e excluir): criar, renomear, emoji e cor, fixar, arquivar, excluir; ordem por última mensagem
 - [ ] ⭐ **T4.2** Conversa: bolhas, separadores de data, horário, rolagem infinita para cima
 - [ ] ⭐ **T4.3** Campo de digitar: textarea que cresce, botão ✈️, regras de Enter, rascunho por assunto
 - [ ] ⭐ **T4.4** `formatar.js`: `*negrito*`, `_itálico_`, `~riscado~`, `` `mono` ``, links clicáveis, sempre com HTML escapado
@@ -63,7 +63,7 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 ## Fase 8 — Busca e acabamento
 - [ ] **T8.1** Busca geral (full-text) e dentro da conversa, com salto até a mensagem destacada
 - [ ] **T8.2** Exportar tudo em JSON (backup)
-- [x] **T8.3** GitHub Actions: backup semanal (`pg_dump` num repositório privado) + ping para o Supabase não pausar; falta configurar os segredos (README, passo 5)
+- [x] **T8.3** GitHub Actions: backup semanal (`pg_dump` num repositório privado) + ping para o Supabase não pausar — rodou OK em 01/10/2026
 - [~] **T8.4** README com o passo a passo de instalação (Fase 0 pronta; completar a cada fase)
 - [ ] **T8.5** Teste em aparelho real: instalar no Android, compartilhar do Instagram, YouTube e TikTok, uso offline, login depois de reinstalar
 

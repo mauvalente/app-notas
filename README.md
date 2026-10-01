@@ -8,11 +8,15 @@ Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREF
 
 | Arquivo | O que é |
 |---|---|
-| `index.html` | O app (por enquanto, uma página provisória que confere o `config.js`) |
+| `index.html`, `css/app.css` | Telas do app: login, lista de assuntos, conversa, configurações |
+| `js/main.js` | Inicialização, telas e rotas (`#/` lista, `#/c/<id>` conversa) |
+| `js/auth.js` | Login Google → Supabase, plano B por redirecionamento, regra dos 180 dias |
+| `js/db.js`, `js/vendor/supabase.js` | Cliente do Supabase (biblioteca guardada no próprio repositório, sem depender de CDN) |
 | `config.js` | Endereços e chaves públicas: Supabase e Google |
 | `manifest.webmanifest`, `icons/` | Instalação na tela inicial |
+| `sw.js` | Service worker: abre rápido e funciona offline. Ao publicar mudanças, aumente `CACHE = 'notas-vN'` |
 | `supabase/migrations/001_schema.sql` | Tabelas, regras de acesso (RLS), funções e o bucket das thumbs |
-| `.github/workflows/backup.yml` | Backup semanal do banco + ping para o Supabase não pausar (vem em `ci/backup.yml`; ver o passo 1) |
+| `.github/workflows/backup.yml` | Backup semanal do banco + ping para o Supabase não pausar |
 
 ---
 
@@ -120,15 +124,38 @@ O plano gratuito do Supabase não guarda backups que você consiga baixar, e pau
 
 > O GitHub desliga workflows agendados de repositórios públicos que ficam **60 dias sem nenhum commit**. Se aparecer o aviso, é só reativar na aba Actions. Enquanto estivermos desenvolvendo, isso não acontece.
 
-## 6. Me avise
+## 6. Recriar o projeto do Supabase em São Paulo
 
-Quando os passos 1 a 5 estiverem prontos, me diga se:
+O primeiro projeto ficou nos EUA (`us-west-2`). Como ainda está vazio, vale recriá-lo em São Paulo:
 
-- a página mostra "config.js preenchido ✓";
-- o workflow de backup rodou verde;
-- apareceu algum erro no caminho.
+1. No projeto antigo: **Project Settings → General → Delete project**.
+2. Crie o novo seguindo o **passo 2**, com Region **South America (São Paulo)**. Confira: a URI do Session pooler (botão **Connect**) deve conter `sa-east-1`.
+3. Atualize o `config.js` com o **novo** Project URL e a **nova** Publishable key.
+4. Refaça o **passo 3** inteiro (SQL + `insert` dos e-mails).
+5. **Passo 4**:
+   - Google Cloud: troque o URI de redirecionamento antigo pelo novo `https://NOVO.supabase.co/auth/v1/callback`. As origens e o Client ID não mudam.
+   - Supabase novo: refaça os itens 6 (provedor Google) e 7 (URL Configuration).
+6. **Passo 5**: no GitHub, atualize os segredos `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` e `SUPABASE_DB_URL`. O token não muda. Rode o **Run workflow** para conferir.
 
-Aí seguimos para a **Fase 1** (casca do app) e para a **Fase 3** (login).
+## 7. Publicar e testar o login (Fases 1 e 3)
+
+```bash
+cd ~/Web/mav/notes
+git add -A
+git commit -m "Fases 1 e 3: casca do app e login"
+git push
+```
+
+Em um ou dois minutos:
+
+1. **No computador**, abra https://mauvalente.github.io/app-notas/ → **Fazer login com o Google** → deve abrir a lista de assuntos (vazia). Toque em **＋**, crie um assunto e confira se ele aparece na lista e abre à direita.
+2. **No Android** (Chrome): abra o endereço → menu ⋮ → **Instalar app** → abra pelo ícone e entre.
+3. **No iPhone** (Safari): abra o endereço → Compartilhar → **Adicionar à Tela de Início** → abra pelo ícone e entre.
+   - Se o botão do Google não fizer nada, ou abrir uma janela que não volta para o app, use o link **"Problemas para entrar? Entrar pelo navegador"**. Me conte qual dos dois funcionou (tarefa T3.4).
+4. Faça um teste com um e-mail que **não** está na lista: deve aparecer "O e-mail … não tem acesso a este app".
+5. Na ⚙️: **Sair desta conta** pede um segundo toque e volta para o login.
+
+Me conte o que funcionou e o que não funcionou (de preferência com print). Aí seguimos para a **Fase 4** (mensagens).
 
 ---
 

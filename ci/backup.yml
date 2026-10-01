@@ -1,0 +1,82 @@
+# Backup semanal do banco + "ping" para o Supabase não pausar o projeto.
+# Configuração no README, passo 5.
+name: Backup e keep-alive
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'   # segundas, 06:17 em Brasília
+  workflow_dispatch:        # botão "Run workflow" para rodar na mão
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Conferir segredos
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TOKEN: ${{ secrets.BACKUP_REPO_TOKEN }}
+        run: |
+          ok=1
+          [ -n "$SUPABASE_URL" ] || { echo "::error::Falta o segredo SUPABASE_URL"; ok=0; }
+          [ -n "$KEY" ]          || { echo "::error::Falta o segredo SUPABASE_PUBLISHABLE_KEY"; ok=0; }
+          [ -n "$DB_URL" ]       || { echo "::error::Falta o segredo SUPABASE_DB_URL"; ok=0; }
+          [ -n "$TOKEN" ]        || { echo "::error::Falta o segredo BACKUP_REPO_TOKEN"; ok=0; }
+          case "$DB_URL" in
+            postgres://*|postgresql://*) ;;
+            *) echo "::error::SUPABASE_DB_URL deve começar com postgresql://"; ok=0 ;;
+          esac
+          case "$DB_URL" in
+            *pooler.supabase.com*) ;;
+            *) echo "::warning::SUPABASE_DB_URL não parece ser do Session pooler (…pooler.supabase.com). A conexão direta (db.xxxx.supabase.co) não funciona no GitHub Actions." ;;
+          esac
+          case "$DB_URL" in
+            *'[YOUR-PASSWORD]'*) echo "::error::Troque [YOUR-PASSWORD] pela senha do banco em SUPABASE_DB_URL"; ok=0 ;;
+          esac
+          [ "$ok" = 1 ]
+
+      - name: Ping na API do Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          curl -sS -o /dev/null -w 'HTTP %{http_code}\n' \
+            "$SUPABASE_URL/rest/v1/usuarios_permitidos?select=email&limit=1" \
+            -H "apikey: $KEY"
+
+      - name: Dump do banco
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p out
+          # Descobre a versão do Postgres do servidor para usar o pg_dump da mesma versão
+          if ! VER=$(docker run --rm -e DB_URL postgres:17 sh -c 'psql "$DB_URL" -Atc "show server_version_num"' 2>err.txt); then
+            cat err.txt
+            echo "::error::Não consegui conectar no banco. Confira a URI do Session pooler e a senha. Se a senha tiver caracteres especiais (@ # / ? % :), gere uma nova só com letras e números em Supabase → Project Settings → Database → Reset database password."
+            exit 1
+          fi
+          MAJOR=$((VER / 10000))
+          echo "Postgres do servidor: $MAJOR ($VER)"
+          docker run --rm -e DB_URL -v "$PWD/out:/out" "postgres:$MAJOR" sh -c '
+            set -e
+            pg_dump "$DB_URL" --schema=public --no-owner --no-privileges -f /out/public.sql
+            pg_dump "$DB_URL" --data-only --table=auth.users --table=auth.identities -f /out/auth_users.sql
+          '
+          ls -la out
+
+      - name: Enviar para o repositório privado de backup
+        env:
+          TOKEN: ${{ secrets.BACKUP_REPO_TOKEN }}
+          REPO: ${{ vars.BACKUP_REPO || 'mauvalente/app-notas-backup' }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${REPO}.git" bk
+          cp out/*.sql bk/
+          cd bk
+          git config user.name  "backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "Sem mudanças" && exit 0
+          git commit -m "Backup $(date -u +%F)"
+          git push

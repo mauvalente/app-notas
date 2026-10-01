@@ -2,34 +2,147 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Notas</title>
+  <meta name="description" content="Links e notas organizados por assunto">
   <meta name="theme-color" content="#0f766e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Notas">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/favicon-32.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <style>
-    :root { color-scheme: light dark; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif;
-           background: #0f766e; color: #fff; text-align: center; }
-    img { width: 96px; height: 96px; border-radius: 22px; }
-    small { opacity: .75; }
-  </style>
+  <link rel="stylesheet" href="css/app.css">
 </head>
-<body>
-  <main>
+<body class="carregando">
+
+  <!-- ============ Tela de carregamento ============ -->
+  <div id="splash" class="splash" aria-hidden="true">
     <img src="icons/icon-192.png" alt="">
-    <h1>Notas</h1>
-    <p>Em construção.</p>
-    <small id="cfg"></small>
-  </main>
-  <script type="module">
-    // Página provisória (Fase 0): confirma que o GitHub Pages está no ar e se o config.js foi preenchido.
-    import { CONFIG } from './config.js';
-    const faltando = Object.entries(CONFIG).filter(([, v]) => String(v).includes('COLE-AQUI')).map(([k]) => k);
-    document.getElementById('cfg').textContent = faltando.length
-      ? 'Falta preencher no config.js: ' + faltando.join(', ')
-      : 'config.js preenchido ✓';
+  </div>
+
+  <!-- ============ Login ============ -->
+  <section id="tela-login" class="tela-login" hidden>
+    <div class="login-cartao">
+      <img class="login-logo" src="icons/icon-192.png" alt="">
+      <h1>Notas</h1>
+      <p class="login-sub">Links e notas organizados por assunto.</p>
+      <div id="google-botao" class="google-botao"></div>
+      <p id="login-erro" class="login-erro" role="alert" hidden></p>
+      <button id="login-alternativo" class="link-botao" type="button">Problemas para entrar? Entrar pelo navegador</button>
+    </div>
+  </section>
+
+  <!-- ============ App ============ -->
+  <div id="app" class="app" hidden>
+
+    <!-- Coluna da esquerda: assuntos -->
+    <aside class="painel-lista" aria-label="Assuntos">
+      <header class="barra barra-lista">
+        <h1 class="barra-titulo">Notas</h1>
+        <button id="btn-config" class="icone-botao" type="button" aria-label="Configurações">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>
+        </button>
+      </header>
+
+      <div class="busca-lista">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input id="busca-assuntos" type="search" placeholder="Buscar assunto" autocomplete="off">
+      </div>
+
+      <ul id="lista-assuntos" class="lista-assuntos" role="list"></ul>
+
+      <div id="lista-vazia" class="vazio" hidden>
+        <p><strong>Nenhum assunto ainda.</strong></p>
+        <p>Toque em ＋ para criar o primeiro.</p>
+      </div>
+
+      <button id="btn-novo-assunto" class="fab" type="button" aria-label="Novo assunto">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+      </button>
+    </aside>
+
+    <!-- Coluna da direita: conversa -->
+    <main class="painel-conversa" aria-label="Conversa">
+      <div id="conversa-nenhuma" class="conversa-nenhuma">
+        <img src="icons/icon-192.png" alt="">
+        <p>Escolha um assunto à esquerda.</p>
+      </div>
+
+      <section id="conversa" class="conversa" hidden>
+        <header class="barra barra-conversa">
+          <button id="btn-voltar" class="icone-botao voltar" type="button" aria-label="Voltar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>
+          </button>
+          <span id="conversa-avatar" class="avatar"></span>
+          <h2 id="conversa-titulo" class="barra-titulo"></h2>
+        </header>
+
+        <div id="mensagens" class="mensagens">
+          <div class="aviso-fase">As mensagens chegam na próxima etapa (Fase 4).</div>
+        </div>
+
+        <form id="composer" class="composer" autocomplete="off">
+          <textarea id="composer-texto" rows="1" placeholder="Mensagem" disabled></textarea>
+          <button class="enviar" type="submit" aria-label="Enviar" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <!-- ============ Configurações ============ -->
+  <dialog id="dlg-config" class="folha">
+    <form method="dialog">
+      <h2>Configurações</h2>
+      <div class="conta">
+        <span id="conta-avatar" class="avatar grande"></span>
+        <div>
+          <strong id="conta-nome"></strong>
+          <small id="conta-email"></small>
+        </div>
+      </div>
+      <button id="btn-sair" class="botao perigo" type="button">Sair desta conta</button>
+      <button id="btn-atualizar" class="botao" type="button">Procurar atualização</button>
+      <p class="versao">Versão <span id="versao"></span></p>
+      <button class="botao secundario" value="fechar">Fechar</button>
+    </form>
+  </dialog>
+
+  <!-- ============ Novo assunto ============ -->
+  <dialog id="dlg-assunto" class="folha">
+    <form id="form-assunto" method="dialog">
+      <h2>Novo assunto</h2>
+      <label class="campo">
+        <span>Emoji (opcional)</span>
+        <input id="assunto-emoji" maxlength="8" placeholder="📚">
+      </label>
+      <label class="campo">
+        <span>Nome</span>
+        <input id="assunto-nome" required placeholder="Ex.: Receitas">
+      </label>
+      <p id="assunto-erro" class="login-erro" hidden></p>
+      <div class="acoes">
+        <button class="botao secundario" value="cancelar" formnovalidate>Cancelar</button>
+        <button id="btn-criar-assunto" class="botao primario" value="criar">Criar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/main.js"></script>
+  <script>
+    // Se o app não abrir em 12 s (internet ruim ou arquivo faltando), mostra um aviso em vez da tela parada
+    setTimeout(function () {
+      if (!document.body.classList.contains('carregando')) return;
+      document.body.classList.remove('carregando');
+      var l = document.getElementById('tela-login'), e = document.getElementById('login-erro');
+      l.hidden = false; e.hidden = false;
+      e.textContent = 'Não consegui abrir o app. Confira a internet e toque para tentar de novo.';
+      e.onclick = function () { location.reload(); };
+    }, 12000);
   </script>
 </body>
 </html>

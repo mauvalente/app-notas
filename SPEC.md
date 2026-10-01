@@ -313,6 +313,7 @@ notes/                      (repositório app-notas)
 │   ├── main.js             inicialização e rotas (#/, #/c/<id>, /compartilhar)
 │   ├── auth.js             Google Identity Services + Supabase + regra dos 180 dias
 │   ├── db.js               cliente Supabase e chamadas
+│   ├── vendor/supabase.js  supabase-js empacotado no repositório (sem depender de CDN)
 │   ├── store.js            IndexedDB, fila de envio e sync
 │   ├── ui-lista.js         lista de assuntos
 │   ├── ui-conversa.js      conversa e bolhas
