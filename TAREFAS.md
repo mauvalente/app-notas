@@ -28,7 +28,7 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [x] ⭐ **T3.4** Testar o login no iPhone com o app instalado; se o pop-up falhar, fazer o plano B por redirecionamento (SPEC 3.4)
 - [x] ⭐ **T3.3** Regra dos 180 dias sem uso + **Sair desta conta** na engrenagem
 
-## Fase 4 — Assuntos e mensagens — pronta; publicar e testar (README, passo 8)
+## Fase 4 — Assuntos e mensagens — pronta e testada
 - [x] ⭐ **T4.1** Lista de assuntos: criar, renomear, emoji e cor, fixar, arquivar, excluir; ordem por última mensagem
 - [x] ⭐ **T4.2** Conversa: bolhas, separadores de data, horário, rolagem infinita para cima
 - [x] ⭐ **T4.3** Campo de digitar: textarea que cresce, botão ✈️, regras de Enter, rascunho por assunto
@@ -39,7 +39,7 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [x] **T4.9** Copiar e mover as mensagens selecionadas
 - [~] **T4.6** Ctrl+B e Ctrl+I prontos; seletor de emoji no computador fica para depois (Windows: tecla Win + . abre o do sistema)
 
-## Fase 5 — Preview de links — pronta (falta só T5.3); publicar a Edge Function (README, passo 8)
+## Fase 5 — Preview de links — pronta e testada (falta só T5.3)
 - [x] ⭐ **T5.1** Edge Function `link-preview`: JWT, normalização de URL, leitura de OG, meta tags e `<title>`, cache em `link_previews`, proteção SSRF e limites
 - [x] ⭐ **T5.2** Baixar a thumb para o bucket `thumbs` + URLs assinadas no app
 - [x] ⭐ **T5.4** Casos especiais: oEmbed do YouTube e do TikTok, X, encurtadores; card "leve" quando o site bloquear
@@ -48,10 +48,10 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [ ] **T5.3** Reduzir as thumbs (no máximo 600 px, WebP) para economizar Storage
 - [x] ~~**T5.5** App na Meta + oEmbed oficial do Instagram~~ — descartada: fica o card leve
 
-## Fase 6 — Receber compartilhamentos
-- [ ] ⭐ **T6.1** `share_target` no manifest + rota `/compartilhar` que extrai a URL de `text`
-- [ ] ⭐ **T6.2** Tela "Salvar em…": escolher ou criar o assunto e abrir a conversa com o texto e o preview prontos
-- [ ] ⭐ **T6.3** Atalho do iOS "Salvar no Notas" + instruções de instalação no README
+## Fase 6 — Receber compartilhamentos — pronta; publicar e testar (README, passo 9)
+- [x] ⭐ **T6.1** `share_target` no manifest (abre `./?title&text&url`) e o app extrai a URL de `text`
+- [x] ⭐ **T6.2** Tela "Salvar em…": escolher ou criar o assunto e abrir a conversa com o texto e o preview prontos
+- [x] ⭐ **T6.3** Atalho do iOS "Salvar no Notas" + instruções de instalação no README
 
 ## Fase 7 — Sincronização, offline e compartilhamento
 - [ ] **T7.1** Cache em IndexedDB e sync incremental (o que mudou desde o último sync)

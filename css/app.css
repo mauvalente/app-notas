@@ -342,6 +342,17 @@ body:not(.carregando) .splash { opacity: 0; visibility: hidden; pointer-events: 
 .arquivados .arq-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .arquivados .botao { min-height: 36px; font-size: 14px; }
 
+.compartilhado {
+  margin: 0; padding: 8px 10px; border-radius: 8px; max-height: 6.5em; overflow: hidden;
+  background: var(--fundo); color: var(--texto-2); font-size: 13.5px; white-space: pre-wrap; word-break: break-word;
+  border-left: 3px solid var(--marca);
+}
+.busca-folha {
+  height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--linha);
+  background: var(--fundo); outline: 0;
+}
+.busca-folha:focus { border-color: var(--marca); }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%);

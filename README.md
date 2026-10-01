@@ -198,7 +198,41 @@ No celular, se o app não mudar sozinho: ⚙️ → **Procurar atualização** (
    - O **voltar** do Android sai da seleção sem sair da conversa.
 6. Na lista, **toque longo num assunto** (ou ⋮ dentro da conversa): fixar, renomear/emoji, arquivar, excluir. Os arquivados ficam em ⚙️ → *Assuntos arquivados*.
 
-Me conte o que funcionou e o que não funcionou (de preferência com print). Se algum link não gerar preview, mande o link para eu ver.
+✅ Concluído e testado.
+
+## 9. Salvar pelo botão Compartilhar (Fase 6)
+
+**1. Publicar:**
+
+```bash
+cd ~/Web/mav/notes
+git add -A
+git commit -m "Fase 6: receber do botão Compartilhar"
+git push
+```
+
+**2. Android** — o Android só lê a lista de "apps para compartilhar" quando o app é instalado:
+
+1. Desinstale o Notas (toque longo no ícone → Desinstalar). Os dados não se perdem: ficam no Supabase.
+2. Abra https://mauvalente.github.io/app-notas/ no Chrome → ⋮ → **Instalar app** → entre.
+3. No Instagram: num post ou reel, toque em **Compartilhar** (avião de papel) → role até **Mais** / **Compartilhar via…** → **Notas**.
+4. Abre a tela **"Salvar em…"**: escolha o assunto (ou **＋ Novo assunto**). A conversa abre com o link no campo e o preview carregando; complete se quiser e toque em enviar.
+
+**3. iPhone** — o Safari não deixa o app aparecer no Compartilhar, então criamos um Atalho:
+
+1. Abra o app **Atalhos** → **＋** (novo atalho).
+2. Toque no nome no topo → **Renomear** → `Salvar no Notas`. (Se quiser, troque o ícone.)
+3. Toque em **ⓘ** (Detalhes) → ligue **Mostrar na Folha de Compartilhamento** → em tipos, deixe só **URLs** e **Texto** → OK.
+4. No bloco *"Receber … da Folha de Compartilhamento"*, toque em **Se não houver entrada** → **Obter da Área de Transferência**. (Assim, com um link copiado, dá para rodar o atalho direto.)
+5. Adicione a ação **Codificar URL** (em inglês: *URL Encode*). Ela já usa a *Entrada do Atalho*.
+6. Adicione a ação **URL** e escreva `https://mauvalente.github.io/app-notas/?text=` — logo depois do `=`, toque em **Variável** e escolha **Texto Codificado em URL**.
+7. Adicione a ação **Abrir URLs** → **OK**.
+
+Para usar: no Instagram → **Compartilhar** → role a fileira de baixo → **Salvar no Notas**.
+
+> O Atalho abre o Notas **no Safari**, não no ícone da tela de início (o iPhone não deixa abrir um app da web pelo atalho). Na primeira vez, entre com o Google no Safari; depois fica salvo por 180 dias como no app.
+
+**4. Teste:** compartilhe um reel do Instagram, um vídeo do YouTube e uma página do navegador. Em cada um: "Salvar em…" → escolher assunto → enviar. Me conte se o link chegou certo e se o preview apareceu.
 
 ---
 

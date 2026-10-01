@@ -211,9 +211,9 @@ Entrada: `POST { url }` com o JWT do usuário. Saída: o objeto do item 4.1.
 
 ## 6. Receber compartilhamentos (Share Target)
 
-- **Android (Chrome, com o PWA instalado)**: `share_target` no `manifest.webmanifest` com `action: "./compartilhar"`, `method: GET`, `params: { title, text, url }`. Com isso o **APP Notas aparece na lista do botão Compartilhar** do Instagram e dos outros apps.
+- **Android (Chrome, com o PWA instalado)**: `share_target` no `manifest.webmanifest` com `action: "./"` (o GitHub Pages não tem rota `/compartilhar`; o app detecta `?title`, `?text` e `?url`), `method: GET`, `params: { title, text, url }`. Com isso o **APP Notas aparece na lista do botão Compartilhar** do Instagram e dos outros apps.
 - Ao receber: o app junta `title`, `text` e `url`. O Instagram manda o link dentro de `text`, então o app extrai a URL. Depois abre o seletor **"Salvar em…"** com a lista de assuntos, com busca e a opção de criar um assunto novo. Escolhido o assunto, abre a conversa com o campo **já preenchido e o preview carregado**, e a pessoa só complementa e envia.
-- **iPhone**: o Safari não aceita Share Target em PWA. Alternativa: um **Atalho do iOS** ("Salvar no Notas") que abre `https://mauvalente.github.io/app-notas/compartilhar?text=<conteúdo>`. Faz parte do MVP (T6.3). Também dá para copiar o link e colar no app.
+- **iPhone**: o Safari não aceita Share Target em PWA. Alternativa: um **Atalho do iOS** ("Salvar no Notas") que abre `https://mauvalente.github.io/app-notas/?text=<conteúdo>` (no Safari; o login lá é separado do app da tela de início). Faz parte do MVP (T6.3). Também dá para copiar o link e colar no app.
 
 ---
 

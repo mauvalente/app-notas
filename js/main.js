@@ -3,9 +3,9 @@ import { supabase, configOk } from './db.js';
 import { sessaoAtual, temAcesso, nomeDe, sair, marcarUso, prepararBotaoGoogle, entrarPorRedirecionamento } from './auth.js';
 import { $, el, toast, mensagemDe, tempo, normalizar, quando, confirmarComSegundoToque } from './util.js';
 import { textoSimples } from './formatar.js';
-import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado } from './conversa.js';
+import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, preencherAoAbrir } from './conversa.js';
 
-export const VERSAO = '0.2.0';
+export const VERSAO = '0.3.0';
 
 const estado = {
   usuario: null,        // { id, email, nome }
@@ -126,7 +126,83 @@ async function mostrarApp() {
 
   await carregarAssuntos();
   aplicarRota();
+  tratarCompartilhamento();
 }
+
+/* ============================================================
+   Receber do botão Compartilhar (Android) ou do Atalho (iPhone)
+   O app abre como  ./?title=...&text=...&url=...
+   ============================================================ */
+
+let compartilhado = null;
+
+function lerCompartilhamento() {
+  const q = new URL(location.href).searchParams;
+  if (!['title', 'text', 'url'].some(k => q.has(k))) return null;
+  const titulo = (q.get('title') || '').trim();
+  let texto = (q.get('text') || '').trim();
+  const url = (q.get('url') || '').trim();
+  if (url && !texto.includes(url)) texto = texto ? texto + '\n' + url : url;
+  if (!texto && titulo) texto = titulo;
+  return texto || null;
+}
+
+function tratarCompartilhamento() {
+  const texto = lerCompartilhamento();
+  if (!texto) return;
+  // limpa a URL para um recarregar não repetir o compartilhamento
+  history.replaceState(null, '', location.pathname + (location.hash || '#/'));
+  compartilhado = texto;
+  $('salvar-em-texto').textContent = texto;
+  $('salvar-em-busca').value = '';
+  desenharSalvarEm();
+  $('dlg-salvar-em').showModal();
+}
+
+function desenharSalvarEm() {
+  const f = normalizar($('salvar-em-busca').value);
+  const itens = estado.assuntos.filter(a => !f || normalizar(a.nome).includes(f));
+  $('salvar-em-lista').replaceChildren(...itens.map(a => el('li', {},
+    el('button', { type: 'button', className: 'item-destino', dataset: { id: a.id } },
+      el('span', { className: 'avatar' }, avatarDe(a)),
+      el('span', {}, a.nome)))));
+  $('salvar-em-vazio').hidden = itens.length > 0;
+}
+
+$('salvar-em-busca').addEventListener('input', desenharSalvarEm);
+
+$('salvar-em-lista').addEventListener('click', (e) => {
+  const b = e.target.closest('.item-destino');
+  if (!b || !compartilhado) return;
+  $('dlg-salvar-em').close('escolhido');
+  preencherAoAbrir(compartilhado);
+  compartilhado = null;
+  if (idDaRota() === b.dataset.id) fecharConversa(); // força reabrir para pegar o texto
+  abrirAssunto(b.dataset.id);
+});
+
+let compartilhadoParaNovo = null;
+
+$('salvar-em-novo').addEventListener('click', () => {
+  compartilhadoParaNovo = compartilhado;
+  compartilhado = null;
+  $('dlg-salvar-em').close('novo');
+  abrirFormAssunto();
+});
+
+// Cancelou a criação do assunto: volta para o "Salvar em…" com o mesmo texto
+$('dlg-assunto').addEventListener('close', () => {
+  if (!compartilhadoParaNovo) return;
+  const texto = compartilhadoParaNovo;
+  compartilhadoParaNovo = null;
+  compartilhado = texto;
+  desenharSalvarEm();
+  $('dlg-salvar-em').showModal();
+});
+
+$('dlg-salvar-em').addEventListener('close', () => {
+  if (compartilhado) { compartilhado = null; toast('Compartilhamento descartado.'); }
+});
 
 /* ---------- Assuntos ---------- */
 
@@ -346,6 +422,7 @@ $('form-assunto').addEventListener('submit', async (e) => {
     $('assunto-erro').hidden = false;
     return;
   }
+  if (compartilhadoParaNovo) { preencherAoAbrir(compartilhadoParaNovo); compartilhadoParaNovo = null; }
   $('dlg-assunto').close();
   await carregarAssuntos();
   if (editando) aplicarRota();

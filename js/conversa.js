@@ -25,6 +25,10 @@ const lista = $('mensagens');
 
 export function configurarConversa(ctx) { c.ctx = ctx; }
 
+/* Texto vindo do botão Compartilhar: entra no campo quando o assunto abrir. */
+let textoPendente = null;
+export function preencherAoAbrir(texto) { textoPendente = texto; }
+
 /* ============================================================
    Abrir / fechar
    ============================================================ */
@@ -39,6 +43,11 @@ export async function abrirConversa(assunto) {
 
   ta.disabled = false;
   ta.value = guardado.ler(chaveRascunho(), '');
+  if (textoPendente) {
+    ta.value = ta.value.trim() ? ta.value.trimEnd() + '\n' + textoPendente : textoPendente;
+    textoPendente = null;
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 50);
+  }
   ajustarAltura();
   detectarLink(true);
   atualizarBotaoEnviar();
