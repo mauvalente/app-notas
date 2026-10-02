@@ -316,6 +316,7 @@ notes/                      (repositório app-notas)
 │   ├── vendor/supabase.js  supabase-js empacotado no repositório (sem depender de CDN)
 │   ├── vendor/tiptap.js    editor da nota, empacotado uma vez (seção 12.5)
 │   ├── nota.js             tela da nota: editor, salvamento, merge e tempo real (seção 12)
+│   ├── mesclar.js          junta duas versões da nota linha a linha (seção 12.6)
 │   ├── store.js / sync.js  cache IndexedDB e fila offline
 │   ├── busca.js            busca nas mensagens (servidor/cache)
 │   ├── store.js            IndexedDB, fila de envio e sync
@@ -335,6 +336,7 @@ notes/                      (repositório app-notas)
 │   ├── testes/teste_005_notas.sql     roteiro de teste da 005
 │   └── functions/link-preview/index.ts
 ├── ci/tiptap/                  script que gera o js/vendor/tiptap.js (esbuild)
+├── ci/testes/mesclar.mjs       teste da junção de mudanças (node ci/testes/mesclar.mjs)
 ├── .github/workflows/backup.yml     backup semanal + keep-alive
 ├── README.md               passo a passo de instalação, no estilo do Contas
 ├── SPEC.md
@@ -427,7 +429,7 @@ create index on notas using gin (busca);
 
 - Cabeçalho igual ao da conversa (←, avatar, nome, ⋮). No ⋮: buscar na nota, compartilhar, renomear, arquivar, **Copiar tudo** (Markdown), **Desmarcar todos** e **Apagar marcados** (este com o segundo toque para confirmar, padrão do Contas).
 - Abaixo do cabeçalho, o editor ocupa toda a área. Não há campo de digitar nem botão ✈️.
-- **Barra de formatação**: no computador, fixa embaixo do cabeçalho; no celular, logo acima do teclado (só aparece com o editor em foco). Botões: **B**, _I_, ~~S~~, ☑ (lista de checkbox), • (lista), ## (subtítulo) e 🔗 (link).
+- **Barra de formatação**: no computador, fixa embaixo do cabeçalho; no celular, logo acima do teclado (só aparece com o editor em foco). Botões: **B**, _I_, ~~S~~, ☑ (lista de checkbox), • (lista), **T** (subtítulo) e 🔗 (link).
 - **Atalhos enquanto digita**: `[ ] ` ou `[] ` no começo da linha vira checkbox; `- ` vira lista; `## ` vira subtítulo; `**…**`, `_…_` e `~~…~~` formatam. No computador: Ctrl+B, Ctrl+I, Ctrl+Shift+S (riscado) e Ctrl+Shift+9 (checkbox).
 - **Checkbox**: tocar no quadradinho marca ou desmarca **sem abrir o teclado** no celular. Enter numa linha de checkbox cria outro checkbox; Enter num checkbox vazio sai da lista.
 - **Colar uma URL** sozinha numa linha vazia vira card de link (12.2). Tocar no card abre o link numa aba nova; para editar a URL, toque longo no card → Editar / Remover.
@@ -451,6 +453,8 @@ create index on notas using gin (busca);
 - **Conflito** (`ok: false`): o app junta as mudanças **por linha** (*merge* de 3 vias: a base, o meu texto e o do servidor). Como cada item da lista é uma linha, os casos comuns se resolvem sozinhos: cada um acrescenta itens diferentes, ou um marca e o outro acrescenta. Se os dois mudaram **a mesma linha** de jeitos diferentes, ficam as duas versões, uma embaixo da outra, e aparece o aviso "Algumas linhas foram editadas pelos dois — confira". Depois do merge, salva de novo com a versão nova.
 - **Tempo real**: chegou mudança da outra pessoa e eu não tenho nada pendente → o editor troca o conteúdo mantendo o cursor e a rolagem o mais perto possível. Se eu tenho algo pendente → faz o merge acima.
 - **Sync incremental**: `notas.atualizado_em` maior que o último sync entra no mesmo ciclo da seção 8.
+- **Como ficou implementado (02/10/2026)**: a cópia local fica no IndexedDB, na tabela `kv`, com a chave `nota:<id>` e os campos `{ conteudo, base_versao, base_conteudo, pendente }`. A lista das notas com mudança não enviada fica em `notas-pendentes`. A nota não usa a fila de mensagens do `sync.js`: tem a própria, com no máximo um envio por nota. Ao abrir o app, quando a internet volta e quando o app volta para a tela, as pendentes sobem (`sincronizarPendentes`).
+- **Junção (`mesclar.js`)**: duas pessoas acrescentando no mesmo ponto → entram as linhas dos dois, sem repetir. Mudanças em linhas diferentes, mesmo vizinhas → as duas valem. A mesma linha mudada de jeitos diferentes → ficam a do servidor e depois a minha, com o aviso. Nota vazia e os dois começam a escrever → os dois textos entram.
 
 ### 12.7 Lista, busca e outras telas
 

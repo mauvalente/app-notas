@@ -7,7 +7,7 @@ import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, p
 import { buscarMensagens, itemResultado } from './busca.js';
 import { abrirBanco, apagarBanco, kvLer, kvGravar } from './store.js';
 import { processarFila, erroDeRede } from './sync.js';
-import { abrirNota, fecharNota } from './nota.js';
+import { abrirNota, fecharNota, configurarNota, receberNota, sincronizarPendentes } from './nota.js';
 
 export const VERSAO = '1.0.0';
 
@@ -63,6 +63,7 @@ async function entrou(sessao) {
   estado.usuario = { id: u.id, email: u.email, nome };
   mostrarApp();
   processarFila();
+  sincronizarPendentes();
   assinarTempoReal();
 }
 
@@ -80,6 +81,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !estado.usuario) return;
   marcarUso();
   processarFila();
+  sincronizarPendentes();
   carregarAssuntos(); // pega o que mudou em outro aparelho
   if (idDaRota()) marcarLido(idDaRota());
 });
@@ -96,6 +98,7 @@ window.addEventListener('online', async () => {
   if (!estado.usuario) return;
   await renovarSessao();
   processarFila();
+  sincronizarPendentes();
   carregarAssuntos();
   assinarTempoReal();
 });
@@ -117,6 +120,10 @@ function assinarTempoReal() {
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'categorias' }, recarregarEmBreve)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'categoria_membros' }, recarregarEmBreve)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notas' }, (p) => {
+      if (p.new?.categoria_id) receberNota(p.new);
+      recarregarEmBreve();
+    })
     .subscribe();
 }
 
@@ -177,6 +184,14 @@ configurarConversa({
   },
   aoMoverOuApagar() { carregarAssuntos(); },
   marcarLido: (id) => marcarLido(id),
+});
+
+configurarNota({
+  get usuario() { return estado.usuario; },
+  aoSalvar(assuntoId, quandoIso) {
+    const a = estado.todos.find(x => x.id === assuntoId);
+    if (a) { a.ultima_msg_em = quandoIso || new Date().toISOString(); ordenarEDesenhar(); }
+  },
 });
 
 async function mostrarApp() {

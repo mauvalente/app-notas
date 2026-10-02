@@ -73,12 +73,13 @@ Os marcados com 🛒 formam o mínimo para usar como lista de compras.
 - [x] 🛒 **T9.2** Roteiro de teste da 005: quem não é membro não lê nem grava; `salvar_nota` recusa versão velha e devolve o estado atual; não grava em assunto do tipo Conversa; excluir o assunto apaga a nota — `supabase/testes/teste_005_notas.sql`, 32 verificações passando num Postgres local que simula o Supabase; 005 aplicada no projeto real em 02/10/2026
 - [x] 🛒 **T9.3** Empacotar o Tiptap (StarterKit, Link, TaskList, TaskItem, Markdown) em `js/vendor/tiptap.js` com o script `ci/tiptap/` (esbuild, versões fixas); incluir no cache do service worker (SPEC 12.5) — Tiptap 3.31.4, teste em `ci/tiptap/teste.html` com 16 verificações OK; `sw.js` em `notas-v6`
 - [x] 🛒 **T9.4** Criar assunto escolhendo **Conversa** ou **Nota**; rota da nota (`#/c/<id>` abre o editor quando `tipo = 'nota'`); 📝 no avatar da lista — por enquanto a nota aparece só para leitura, em texto puro (o editor entra na T9.5); notas ficam fora do "Salvar em…" até a T9.15 e fora do Mover; `sw.js` em `notas-v7`
-- [ ] 🛒 **T9.5** Tela da nota (`js/nota.js`): editor ocupando a área, leitura e gravação em Markdown GFM, sem HTML bruto (SPEC 12.2 e 12.8)
-- [ ] 🛒 **T9.6** Checkbox: lista de checkbox, marcar sem abrir o teclado no celular, riscado e opacidade por CSS, Enter cria o próximo item e Enter no item vazio sai da lista
-- [ ] 🛒 **T9.7** Barra de formatação (B, I, S, ☑, •, ##, 🔗): fixa no computador, acima do teclado no celular; atalhos de digitação (`[ ] `, `- `, `## `) e de teclado (Ctrl+B, Ctrl+I, Ctrl+Shift+S, Ctrl+Shift+9)
-- [ ] 🛒 **T9.8** Salvamento automático (800 ms, ao sair, `visibilitychange`), cópia local no IndexedDB e indicador "Salvando… / Salvo / 🕓 Aguardando envio"
-- [ ] 🛒 **T9.9** Fila offline com um item por nota + merge por linha (3 vias) quando `salvar_nota` devolver conflito; aviso "editadas pelos dois — confira" (SPEC 12.6)
-- [ ] 🛒 **T9.10** Tempo real: aplicar a mudança da outra pessoa mantendo cursor e rolagem; merge se houver algo pendente; aviso "Atualizada por <nome>"
+- [x] 🛒 **T9.5** Tela da nota (`js/nota.js`): editor ocupando a área, leitura e gravação em Markdown GFM, sem HTML bruto (SPEC 12.2 e 12.8)
+- [x] 🛒 **T9.6** Checkbox: lista de checkbox, marcar sem abrir o teclado no celular, riscado e opacidade por CSS, Enter cria o próximo item e Enter no item vazio sai da lista
+- [x] 🛒 **T9.7** Barra de formatação (B, I, S, ☑, •, ##, 🔗): fixa no computador, acima do teclado no celular; atalhos de digitação (`[ ] `, `- `, `## `) e de teclado (Ctrl+B, Ctrl+I, Ctrl+Shift+S, Ctrl+Shift+9)
+- [x] 🛒 **T9.8** Salvamento automático (800 ms, ao sair, `visibilitychange`), cópia local no IndexedDB e indicador "Salvando… / Salvo / 🕓 Aguardando envio"
+- [x] 🛒 **T9.9** Fila offline com um item por nota + merge por linha (3 vias) quando `salvar_nota` devolver conflito; aviso "editadas pelos dois — confira" (SPEC 12.6)
+- [x] 🛒 **T9.10** Tempo real: aplicar a mudança da outra pessoa mantendo cursor e rolagem; merge se houver algo pendente; aviso "Atualizada por <nome>"
+  - Testado no navegador com um Supabase simulado (celular e computador, 51 verificações): checkbox sem abrir o teclado, Enter cria o próximo item, salvamento único depois de digitar, barra B/I/S/☑/•/T/🔗, conflito juntado linha a linha, tempo real com "Atualizada por …", offline com reabrir e subir quando a internet volta. Junção testada em `ci/testes/mesclar.mjs` (13 casos). `sw.js` em `notas-v8`.
 - [ ] **T9.11** Card de link na nota: URL sozinha na linha vira card (cache `link_previews` + Edge Function); colar URL vira card; toque longo → Editar / Remover
 - [ ] **T9.12** Lista de assuntos: prévia da nota (primeira linha ou "☑ 3 de 10") e ponto de "editada pela outra pessoa" (`notas_alteradas` + `lido_ate`)
 - [ ] **T9.13** Menu ⋮ da nota: Copiar tudo, Desmarcar todos, Apagar marcados (segundo toque para confirmar), buscar na nota
