@@ -2,7 +2,7 @@
 
 App de celular, no estilo WhatsApp, para guardar links e textos organizados por assunto. Cada pessoa entra com a própria conta Google, e um assunto pode ser compartilhado com a outra pessoa.
 
-Especificação completa em [SPEC.md](SPEC.md) e andamento em [TAREFAS.md](TAREFAS.md).
+Especificação completa em [SPEC.md](SPEC.md), andamento em [TAREFAS.md](TAREFAS.md) e cuidados do dia a dia em [MANUTENCAO.md](MANUTENCAO.md).
 
 ## Arquivos
 
@@ -303,6 +303,10 @@ git push
 3. Sem internet, a busca procura no que está guardado no aparelho (avisa no título).
 4. ⚙️ → **⬇️ Exportar meus dados (JSON)**: baixa `notas-backup-AAAA-MM-DD.json` com todos os assuntos e mensagens.
 5. Envie um link novo com imagem grande e confira que o preview continua aparecendo normal.
+
+> Para conferir a redução: Supabase → **Storage** → `thumbs` → as imagens mais novas terminam em **.webp** e têm poucas dezenas de KB. Links de notícia (g1, UOL, Folha…) costumam ter imagens de 1200 px — bons para testar.
+
+✅ Concluído e testado.
 
 ---
 
