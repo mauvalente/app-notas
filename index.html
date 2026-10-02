@@ -120,6 +120,9 @@
           </button>
         </header>
 
+        <!-- Assunto do tipo Nota: o editor ocupa a área (SPEC 12.4) -->
+        <div id="nota-area" class="nota-area" hidden></div>
+
         <div class="area-mensagens">
           <div id="mensagens" class="mensagens"></div>
           <div id="busca-conversa-resultados" class="busca-resultados" hidden>
@@ -171,6 +174,20 @@
   <dialog id="dlg-assunto" class="folha">
     <form id="form-assunto" method="dialog">
       <h2 id="assunto-titulo">Novo assunto</h2>
+      <fieldset id="assunto-tipo" class="tipo-assunto">
+        <legend>Tipo</legend>
+        <label class="tipo-opcao">
+          <input type="radio" name="tipo" value="conversa" checked>
+          <span class="tipo-icone" aria-hidden="true">💬</span>
+          <span><strong>Conversa</strong><small>Mensagens e links, como no WhatsApp</small></span>
+        </label>
+        <label class="tipo-opcao">
+          <input type="radio" name="tipo" value="nota">
+          <span class="tipo-icone" aria-hidden="true">📝</span>
+          <span><strong>Nota</strong><small>Um texto só, com checkbox: ótimo para lista de compras</small></span>
+        </label>
+        <p class="dica">O tipo não muda depois de criado.</p>
+      </fieldset>
       <label class="campo">
         <span>Emoji (opcional)</span>
         <input id="assunto-emoji" maxlength="8" placeholder="📚">

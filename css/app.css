@@ -418,3 +418,34 @@ body:not(.carregando) .splash { opacity: 0; visibility: hidden; pointer-events: 
   .bolha.com-link { width: 85%; }
   .conversa-nenhuma { display: none; }
 }
+
+/* ---------- Assunto do tipo Nota (SPEC 12) ---------- */
+.avatar.com-selo { position: relative; }
+.avatar .selo {
+  position: absolute; right: -3px; bottom: -3px;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 11px; line-height: 1; text-transform: none;
+  background: var(--painel); box-shadow: 0 0 0 2px var(--painel);
+}
+.barra .avatar .selo { width: 18px; height: 18px; font-size: 10px; }
+
+.tipo-assunto { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tipo-assunto legend { font-size: 13px; color: var(--texto-2); margin-bottom: 4px; padding: 0; }
+.tipo-opcao {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--linha); border-radius: var(--raio); background: var(--fundo);
+}
+.tipo-opcao:has(input:checked) { border-color: var(--marca); background: var(--ativo); }
+.tipo-opcao:has(input:focus-visible) { outline: 2px solid var(--marca); outline-offset: 2px; }
+.tipo-opcao input { position: absolute; opacity: 0; pointer-events: none; }
+.tipo-icone { font-size: 24px; flex: none; }
+.tipo-opcao strong { display: block; }
+.tipo-opcao small { display: block; color: var(--texto-2); font-size: 12.5px; }
+
+.conversa.modo-nota .area-mensagens,
+.conversa.modo-nota .composer-area { display: none; }
+.nota-area { flex: 1; min-height: 0; overflow-y: auto; background: var(--painel); overscroll-behavior: contain; }
+.nota-folha { max-width: 760px; margin: 0 auto; padding: 16px 20px calc(24px + env(safe-area-inset-bottom)); }
+.nota-texto { white-space: pre-wrap; overflow-wrap: anywhere; }
+.nota-vazia { color: var(--texto-2); margin: 0 0 8px; }

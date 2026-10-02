@@ -7,6 +7,7 @@ import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, p
 import { buscarMensagens, itemResultado } from './busca.js';
 import { abrirBanco, apagarBanco, kvLer, kvGravar } from './store.js';
 import { processarFila, erroDeRede } from './sync.js';
+import { abrirNota, fecharNota } from './nota.js';
 
 export const VERSAO = '1.0.0';
 
@@ -225,10 +226,10 @@ function tratarCompartilhamento() {
 
 function desenharSalvarEm() {
   const f = normalizar($('salvar-em-busca').value);
-  const itens = estado.assuntos.filter(a => !f || normalizar(a.nome).includes(f));
+  const itens = estado.assuntos.filter(a => !ehNota(a) && (!f || normalizar(a.nome).includes(f)));
   $('salvar-em-lista').replaceChildren(...itens.map(a => el('li', {},
     el('button', { type: 'button', className: 'item-destino', dataset: { id: a.id } },
-      el('span', { className: 'avatar' }, avatarDe(a)),
+      avatarEl(a),
       el('span', {}, a.nome)))));
   $('salvar-em-vazio').hidden = itens.length > 0;
 }
@@ -275,7 +276,7 @@ function carregarAssuntos() {
   carregando ??= (async () => {
     try {
       const [cats, minhas, ultimas, naoLidas] = await Promise.all([
-        supabase.from('categorias').select('id, nome, emoji, cor, dono_id, ultima_msg_em, criado_em'),
+        supabase.from('categorias').select('id, nome, emoji, cor, tipo, dono_id, ultima_msg_em, criado_em'),
         supabase.from('categoria_membros').select('categoria_id, usuario_id, papel, fixada, arquivada'),
         supabase.rpc('ultimas_mensagens'),
         supabase.rpc('nao_lidas'),
@@ -331,6 +332,15 @@ function ordenarEDesenhar() {
 
 function avatarDe(a) { return a.emoji || a.nome.trim().charAt(0); }
 
+/** Assunto do tipo Nota (os antigos, sem tipo, são conversa). */
+export const ehNota = (a) => a?.tipo === 'nota';
+
+/** Avatar do assunto; nas notas, com um 📝 pequeno no canto. */
+function avatarEl(a, classe = '') {
+  return el('span', { className: 'avatar' + (classe ? ' ' + classe : '') + (ehNota(a) ? ' com-selo' : '') },
+    avatarDe(a), ehNota(a) ? el('span', { className: 'selo', 'aria-label': 'Nota' }, '📝') : null);
+}
+
 /** Assunto com mais de uma pessoa (sou editor, ou sou dono e chamei alguém). */
 const comMembros = new Set();
 function temOutros(a) { return a.papel === 'editor' || comMembros.has(a.id); }
@@ -343,13 +353,13 @@ function desenharLista() {
 
   ul.replaceChildren(...itens.map(a => {
     const u = estado.ultimas.get(a.id);
-    let previa = 'Sem mensagens';
-    if (u) {
+    let previa = ehNota(a) ? 'Nota' : 'Sem mensagens';
+    if (u && !ehNota(a)) {
       const t = textoSimples(u.texto);
       previa = u.titulo && !t ? '🔗 ' + u.titulo : (u.titulo ? '🔗 ' : '') + t;
     }
     return el('li', { className: 'assunto' + (a.id === atual ? ' ativo' : ''), dataset: { id: a.id }, tabindex: '0' },
-      el('span', { className: 'avatar' }, avatarDe(a)),
+      avatarEl(a),
       el('div', { className: 'assunto-corpo' },
         el('div', { className: 'assunto-topo' },
           el('span', { className: 'assunto-nome' }, (a.fixada ? '📌 ' : '') + a.nome + (temOutros(a) ? ' 👥' : '')),
@@ -536,6 +546,7 @@ function abrirFormAssunto(a = null) {
   $('btn-criar-assunto').textContent = a ? 'Salvar' : 'Criar';
   $('assunto-nome').value = a?.nome || '';
   $('assunto-emoji').value = a?.emoji || '';
+  $('assunto-tipo').hidden = !!a; // o tipo não muda depois de criado
   $('assunto-erro').hidden = true;
   $('dlg-assunto').showModal();
   setTimeout(() => $('assunto-nome').focus(), 50);
@@ -548,6 +559,7 @@ $('form-assunto').addEventListener('submit', async (e) => {
   e.preventDefault();
   const nome = $('assunto-nome').value.trim();
   const emoji = $('assunto-emoji').value.trim() || null;
+  const tipo = $('form-assunto').elements.tipo.value === 'nota' ? 'nota' : 'conversa';
   if (!nome) return;
   const btn = $('btn-criar-assunto');
   btn.disabled = true;
@@ -555,7 +567,7 @@ $('form-assunto').addEventListener('submit', async (e) => {
   const id = editando?.id || crypto.randomUUID();
   const { error } = editando
     ? await supabase.from('categorias').update({ nome, emoji }).eq('id', id)
-    : await supabase.from('categorias').insert({ id, nome, emoji });
+    : await supabase.from('categorias').insert({ id, nome, emoji, tipo });
   btn.disabled = false;
   if (error) {
     $('assunto-erro').textContent = (editando ? 'Não deu para salvar: ' : 'Não deu para criar: ') + mensagemDe(error);
@@ -634,7 +646,7 @@ $('btn-arquivados').addEventListener('click', () => {
 function desenharArquivados() {
   const arq = estado.todos.filter(a => a.arquivada);
   $('arquivados-lista').replaceChildren(...arq.map(a => el('li', {},
-    el('span', { className: 'avatar' }, avatarDe(a)),
+    avatarEl(a),
     el('span', { className: 'arq-nome' }, a.nome),
     el('button', { type: 'button', className: 'botao', onclick: () => { assuntoDoMenu = a; atualizarMinhaParticipacao({ arquivada: false }); } }, 'Desarquivar'))));
   $('arquivados-vazio').hidden = arq.length > 0;
@@ -664,13 +676,26 @@ function aplicarRota() {
   $('conversa').hidden = !assunto;
   $('conversa-nenhuma').hidden = !!assunto;
 
+  const nota = ehNota(assunto);
+  $('conversa').classList.toggle('modo-nota', nota);
+  $('nota-area').hidden = !nota;
+  $('btn-buscar-conversa').hidden = nota; // a busca dentro da nota chega na T9.13
+
   if (assunto) {
     $('conversa-titulo').textContent = assunto.nome + (temOutros(assunto) ? ' 👥' : '');
-    $('conversa-avatar').textContent = avatarDe(assunto);
-    assuntoAtualizado(assunto);
-    abrirConversa(assunto);
+    $('conversa-avatar').replaceWith(Object.assign(avatarEl(assunto), { id: 'conversa-avatar' }));
+    if (nota) {
+      fecharConversa();
+      abrirNota(assunto);
+      marcarLido(assunto.id);
+    } else {
+      fecharNota();
+      assuntoAtualizado(assunto);
+      abrirConversa(assunto);
+    }
   } else {
     fecharConversa();
+    fecharNota();
     if (id) history.replaceState(null, '', location.pathname + location.search + '#/');
   }
   document.querySelectorAll('.assunto').forEach(li => li.classList.toggle('ativo', li.dataset.id === id));

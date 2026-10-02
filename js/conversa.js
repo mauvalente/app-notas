@@ -487,13 +487,15 @@ $('sel-excluir').addEventListener('click', (e) => {
 
 $('sel-mover').addEventListener('click', () => {
   if (!navigator.onLine) { toast('Mover precisa de internet.'); return; }
-  const destinos = c.ctx.assuntos().filter(a => a.id !== c.assunto.id);
+  // assuntos do tipo Nota não recebem mensagens (SPEC 12.7)
+  const destinos = c.ctx.assuntos().filter(a => a.id !== c.assunto.id && a.tipo !== 'nota');
   const ul = $('mover-lista');
   ul.replaceChildren(...destinos.map(a => el('li', {},
     el('button', { type: 'button', className: 'item-destino', dataset: { id: a.id } },
       el('span', { className: 'avatar' }, a.emoji || a.nome.trim().charAt(0)),
       el('span', {}, a.nome)))));
   $('mover-vazio').hidden = destinos.length > 0;
+  $('mover-vazio').textContent = 'Crie outro assunto do tipo Conversa primeiro.';
   $('dlg-mover').showModal();
 });
 
