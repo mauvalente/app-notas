@@ -2,7 +2,7 @@
 
 App de celular (PWA) para guardar links de redes sociais, com a thumbnail, e textos curtos, organizados por assunto. A interface imita o WhatsApp: a lista de assuntos à esquerda e a conversa do assunto à direita, com o campo de digitar embaixo.
 
-Status: rascunho v0.1 (30/09/2026)
+Status: rascunho v0.2 (02/10/2026) — v0.2 acrescenta o assunto do tipo **Nota** (seção 12)
 
 ---
 
@@ -231,7 +231,7 @@ Entrada: `POST { url }` com o JWT do usuário. Saída: o objeto do item 4.1.
 - Ordem: fixados primeiro, depois os de `ultima_msg_em` mais recente.
 - Ícone 👥 nos assuntos compartilhados.
 - No topo, uma busca que filtra por nome do assunto e que também procura no conteúdo das mensagens (ver 7.5).
-- Botão flutuante **＋**: novo assunto (nome, emoji opcional).
+- Botão flutuante **＋**: novo assunto (nome, emoji opcional e o tipo: **Conversa** ou **Nota**, ver seção 12).
 - Toque longo num assunto: fixar, renomear, emoji e cor, compartilhar, arquivar e excluir. Excluir só aparece para o dono e pede confirmação com um segundo toque; num assunto de outra pessoa, no lugar dele aparece **Sair do assunto**.
 
 ### 7.3 Conversa
@@ -314,6 +314,8 @@ notes/                      (repositório app-notas)
 │   ├── auth.js             Google Identity Services + Supabase + regra dos 180 dias
 │   ├── db.js               cliente Supabase e chamadas
 │   ├── vendor/supabase.js  supabase-js empacotado no repositório (sem depender de CDN)
+│   ├── vendor/tiptap.js    editor da nota, empacotado uma vez (seção 12.5)
+│   ├── nota.js             tela da nota: editor, salvamento, merge e tempo real (seção 12)
 │   ├── store.js / sync.js  cache IndexedDB e fila offline
 │   ├── busca.js            busca nas mensagens (servidor/cache)
 │   ├── store.js            IndexedDB, fila de envio e sync
@@ -328,7 +330,11 @@ notes/                      (repositório app-notas)
 │   ├── migrations/002_ultimas_mensagens.sql   prévia da última mensagem na lista
 │   ├── migrations/003_tempo_real_nao_lidas.sql   tempo real + não lidas
 │   ├── migrations/004_busca.sql   busca sem acento e por pedaço de palavra
+│   ├── migrations/005_notas.sql   assunto do tipo Nota (seção 12.3)
+│   ├── testes/supabase_simulado.sql   imita o Supabase (auth, papéis, storage) num Postgres local
+│   ├── testes/teste_005_notas.sql     roteiro de teste da 005
 │   └── functions/link-preview/index.ts
+├── ci/tiptap/                  script que gera o js/vendor/tiptap.js (esbuild)
 ├── .github/workflows/backup.yml     backup semanal + keep-alive
 ├── README.md               passo a passo de instalação, no estilo do Contas
 ├── SPEC.md
@@ -355,3 +361,107 @@ notes/                      (repositório app-notas)
 4. **Várias URLs numa mensagem**: preview só da primeira, por enquanto.
 5. **Nome do app**: **Notas**.
 6. **Revisão de 30/09/2026**: backup semanal por GitHub Actions num repositório privado; o app usa a *publishable key* nova do Supabase; ícone próprio do app (balão de conversa com marcador), já em `icons/`.
+7. **Assunto do tipo Nota (02/10/2026)**: editor de texto no lugar da conversa, salvo em **Markdown (GFM)** numa coluna `text`; checkbox com riscado por CSS; URL sozinha na linha vira card; editor Tiptap empacotado em `js/vendor/`; gravação só pela RPC `salvar_nota` com controle de versão e merge por linha. O tipo não muda depois de criado. Detalhes na seção 12.
+
+---
+
+## 12. Assunto do tipo Nota (v0.2, 02/10/2026)
+
+Além do assunto do tipo **Conversa** (o de hoje, com bolhas), passa a existir o assunto do tipo **Nota**: ao abrir, em vez das bolhas e do campo de digitar com ✈️, a tela inteira é **um editor de texto**. O uso principal é a lista de compras: itens com checkbox, e o item marcado aparece riscado.
+
+### 12.1 Regras gerais
+
+- O tipo é escolhido ao criar o assunto (**＋** → nome, emoji e **Conversa** ou **Nota**) e **não muda depois**.
+- Fixar, arquivar, renomear, emoji e cor, compartilhar, sair e excluir funcionam igual aos assuntos do tipo Conversa (seção 7.2).
+- Uma nota por assunto. Para ter várias listas, cria-se um assunto do tipo Nota para cada uma.
+
+### 12.2 Formato salvo: Markdown
+
+O conteúdo fica em **Markdown no padrão do GitHub (GFM)**, numa coluna `text`. O editor mostra o texto já formatado, e a pessoa não vê os símbolos do Markdown.
+
+| Recurso | Markdown salvo | Na tela |
+|---|---|---|
+| Negrito / itálico / riscado | `**texto**` / `_texto_` / `~~texto~~` | formatado |
+| Lista simples / numerada | `- item` / `1. item` | lista |
+| Checkbox | `- [ ] leite` / `- [x] pão` | ☐ leite / ☑ ~~pão~~ |
+| Subtítulo | `## Hortifrúti` | título menor (só `##`, para separar seções da lista) |
+| Link no meio do texto | `[texto](https://…)` ou a URL solta | link clicável |
+| **Card de link** | uma URL **sozinha numa linha** | card com miniatura, título e site (como na bolha) |
+
+Regras:
+- **O riscado do item marcado vem do CSS**, não do texto: grava-se só `- [x] pão`, e o estilo `li[data-checked="true"]` aplica riscado e opacidade menor. Desmarcar volta ao normal sem mexer no texto.
+- **Card de link**: a nota guarda só a URL; o card é montado a partir do cache `link_previews` (com a Edge Function `link-preview` se ainda não houver cache). Diferente da mensagem, a nota **não** guarda cópia do preview. Se o preview falhar, a linha aparece como link comum.
+- HTML dentro do Markdown **não é aceito** (o parser roda com `html: false`). Só os nós da tabela acima existem no editor; qualquer outra coisa vira texto puro.
+- Limite de tamanho: 200 mil caracteres por nota (`check` no banco).
+
+### 12.3 Banco (migration `005_notas.sql`)
+
+```sql
+alter table categorias add column tipo text not null default 'conversa'
+  check (tipo in ('conversa','nota'));
+-- o app só grava `tipo` no INSERT (sem permissão de UPDATE nessa coluna)
+
+create table notas (
+  categoria_id    uuid primary key references categorias on delete cascade,
+  conteudo        text not null default '' check (length(conteudo) <= 200000),
+  versao          int  not null default 0,
+  atualizado_por  uuid references auth.users,
+  atualizado_em   timestamptz not null default now(),
+  busca           tsvector generated always as (to_tsvector('portuguese', conteudo)) stored
+);
+create index on notas using gin (busca);
+```
+
+- **RLS**: SELECT para quem é membro do assunto. Sem INSERT, UPDATE ou DELETE direto pelo app; a gravação é só pela RPC abaixo, e a exclusão vem do `on delete cascade` do assunto.
+- **Nota que ainda não existe** no banco é tratada como nota vazia com `versao = 0`. A linha nasce no primeiro salvamento; por isso criar o assunto offline continua funcionando.
+- **RPC `salvar_nota(p_categoria uuid, p_conteudo text, p_versao_base int)`** (`security definer`, confere `eh_permitido()`, se a pessoa é membro e se o assunto é do tipo `nota`):
+  - Se a versão no banco é igual a `p_versao_base` (ou a linha não existe e `p_versao_base = 0`), grava, faz `versao + 1`, preenche `atualizado_por` e `atualizado_em`, e devolve `{ ok: true, versao }`.
+  - Se não é, **não grava** e devolve `{ ok: false, versao, conteudo, atualizado_por, atualizado_em }` com o estado atual, para o app juntar as mudanças (12.6).
+  - A troca é atômica: `update … where categoria_id = … and versao = p_versao_base`.
+- **Trigger**: ao salvar a nota, atualiza `categorias.ultima_msg_em`, para a ordem da lista continuar valendo.
+- **RPC `buscar_notas(p_q text, p_limite int)`**: mesma lógica da `buscar_mensagens` da migration 004 (full-text + `sem_acento` com `like`), devolvendo `categoria_id`, `conteudo` e `atualizado_em`.
+- **RPC `notas_alteradas()`**: assuntos do tipo Nota em que `atualizado_por` não sou eu e `atualizado_em > coalesce(lido_ate, adicionado_em)`. Serve para o ponto de "editada" na lista (12.7).
+- **Tempo real**: `notas` entra na publicação `supabase_realtime`.
+
+### 12.4 Tela da nota
+
+- Cabeçalho igual ao da conversa (←, avatar, nome, ⋮). No ⋮: buscar na nota, compartilhar, renomear, arquivar, **Copiar tudo** (Markdown), **Desmarcar todos** e **Apagar marcados** (este com o segundo toque para confirmar, padrão do Contas).
+- Abaixo do cabeçalho, o editor ocupa toda a área. Não há campo de digitar nem botão ✈️.
+- **Barra de formatação**: no computador, fixa embaixo do cabeçalho; no celular, logo acima do teclado (só aparece com o editor em foco). Botões: **B**, _I_, ~~S~~, ☑ (lista de checkbox), • (lista), ## (subtítulo) e 🔗 (link).
+- **Atalhos enquanto digita**: `[ ] ` ou `[] ` no começo da linha vira checkbox; `- ` vira lista; `## ` vira subtítulo; `**…**`, `_…_` e `~~…~~` formatam. No computador: Ctrl+B, Ctrl+I, Ctrl+Shift+S (riscado) e Ctrl+Shift+9 (checkbox).
+- **Checkbox**: tocar no quadradinho marca ou desmarca **sem abrir o teclado** no celular. Enter numa linha de checkbox cria outro checkbox; Enter num checkbox vazio sai da lista.
+- **Colar uma URL** sozinha numa linha vazia vira card de link (12.2). Tocar no card abre o link numa aba nova; para editar a URL, toque longo no card → Editar / Remover.
+- Indicador discreto no cabeçalho: "Salvando…", "Salvo", "🕓 Aguardando envio" ou "Atualizada por <nome>" (por alguns segundos, quando chega mudança da outra pessoa).
+
+### 12.5 Editor
+
+- **Tiptap** (sobre o ProseMirror), com as extensões StarterKit (limitada aos nós da tabela 12.2), Link, TaskList, TaskItem e Markdown (leitura e gravação de GFM), mais um nó próprio `cardLink` que vira uma URL solta numa linha ao salvar.
+- O projeto não tem etapa de build, então o Tiptap entra **empacotado uma vez** num arquivo só, `js/vendor/tiptap.js` (ES module), gerado com esbuild por um script em `ci/tiptap/` (com `package.json` e versões fixas). O arquivo gerado vai para o repositório, como o `supabase-js`, e o app continua publicando só com cópia de arquivos.
+- O service worker passa a cachear também o `tiptap.js`, e a versão do cache sobe.
+- Versões fixas: Tiptap **3.31.4** e esbuild 0.28.2. O pacote tem cerca de 440 KB (cerca de 140 KB comprimido) e só é carregado (`import()` dinâmico) quando a pessoa abre uma nota.
+- **Link → URL pura**: por padrão, o Markdown do Tiptap grava uma URL solta como `[url](url)`. O app estende o Link para gravar só a URL quando o texto é igual ao endereço, que é o formato do card (12.2).
+- `<`, `>` e `&` digitados na nota ficam como `&lt;`, `&gt;` e `&amp;` no Markdown salvo (o Tiptap escapa para não virar HTML). Na tela aparecem normais, e abrir e salvar de novo não muda nada.
+- **Teste**: `ci/tiptap/teste.html` roda no navegador e confere a ida e volta do Markdown (checkbox, formatação, subtítulo, listas, links, URL pura, HTML bloqueado, `javascript:` bloqueado, acentos) e o toque no checkbox. Rodar depois de cada atualização do Tiptap.
+
+### 12.6 Salvamento, offline e conflitos
+
+- **Salvamento automático**: 800 ms depois da última tecla, e também ao sair da nota, ao trocar de aba ou de app (`visibilitychange`) e antes de fechar.
+- **Cópia local**: a nota fica no IndexedDB com `conteudo`, `versao_base` (a última versão confirmada pelo servidor) e `base_conteudo` (o texto dessa versão). Abrir a nota é instantâneo, mesmo offline.
+- **Fila offline**: no máximo **um** item pendente por nota (salvar de novo substitui o anterior). Ao voltar a conexão, chama `salvar_nota` com a `versao_base`.
+- **Conflito** (`ok: false`): o app junta as mudanças **por linha** (*merge* de 3 vias: a base, o meu texto e o do servidor). Como cada item da lista é uma linha, os casos comuns se resolvem sozinhos: cada um acrescenta itens diferentes, ou um marca e o outro acrescenta. Se os dois mudaram **a mesma linha** de jeitos diferentes, ficam as duas versões, uma embaixo da outra, e aparece o aviso "Algumas linhas foram editadas pelos dois — confira". Depois do merge, salva de novo com a versão nova.
+- **Tempo real**: chegou mudança da outra pessoa e eu não tenho nada pendente → o editor troca o conteúdo mantendo o cursor e a rolagem o mais perto possível. Se eu tenho algo pendente → faz o merge acima.
+- **Sync incremental**: `notas.atualizado_em` maior que o último sync entra no mesmo ciclo da seção 8.
+
+### 12.7 Lista, busca e outras telas
+
+- **Lista de assuntos**: avatar com 📝 pequeno no canto para o tipo Nota. Prévia: o primeiro item ou linha do texto; se houver checkboxes, "☑ 3 de 10". Em vez do contador de não lidas, um **ponto** quando a outra pessoa editou a nota depois da última vez que eu a abri (`notas_alteradas()`); abrir a nota grava `lido_ate`.
+- **Busca geral**: junta os resultados de `buscar_mensagens` e de `buscar_notas`. O resultado de nota mostra o trecho em volta do termo; tocar abre a nota rolada até o trecho, que fica destacado. Offline, busca na cópia local.
+- **Salvar em… (compartilhamento)**: se o assunto escolhido for uma nota, a URL recebida é **acrescentada no fim** da nota, numa linha nova (vira card), e a nota abre com o cursor ali.
+- **Mover mensagens**: os assuntos do tipo Nota não aparecem como destino, por enquanto.
+- **Exportar tudo em JSON**: inclui as notas (`categoria_id`, `conteudo` em Markdown, `atualizado_em`).
+
+### 12.8 Segurança
+
+- O Markdown vira HTML só pelo schema do Tiptap: nós e marcas desconhecidos viram texto, e HTML bruto é ignorado.
+- Links e cards só aceitam `http` e `https`; abrem com `target="_blank"` e `rel="noopener"`.
+- O app não grava em `notas` diretamente; tudo passa pela `salvar_nota`, que confere permissão, tipo do assunto e versão.
