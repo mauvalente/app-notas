@@ -47,7 +47,7 @@
 
       <div class="busca-lista">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input id="busca-assuntos" type="search" placeholder="Buscar assuntos e mensagens" autocomplete="off">
+        <input id="busca-assuntos" type="search" placeholder="Buscar assuntos, mensagens e notas" autocomplete="off">
       </div>
 
       <div class="lista-rolagem">
@@ -211,6 +211,9 @@
   <dialog id="dlg-menu" class="folha">
     <form method="dialog" class="menu">
       <h2 id="menu-titulo"></h2>
+      <button id="menu-copiar-nota" class="item-menu" type="button" hidden>📋 Copiar tudo</button>
+      <button id="menu-desmarcar" class="item-menu" type="button" hidden>☐ Desmarcar todos</button>
+      <button id="menu-apagar-marcados" class="item-menu perigo" type="button" hidden>🧹 Apagar marcados</button>
       <button id="menu-fixar" class="item-menu" type="button"></button>
       <button id="menu-compartilhar" class="item-menu" type="button">👥 Compartilhar</button>
       <button id="menu-editar" class="item-menu" type="button">✏️ Renomear / emoji</button>
@@ -273,7 +276,8 @@
       </label>
       <p id="link-erro" class="login-erro" hidden></p>
       <div class="acoes">
-        <button id="link-remover" class="botao perigo" value="remover" formnovalidate hidden>Remover link</button>
+        <button id="link-abrir" class="botao" value="abrir" formnovalidate hidden>Abrir</button>
+        <button id="link-remover" class="botao perigo" value="remover" formnovalidate hidden>Remover</button>
         <button class="botao secundario" value="cancelar" formnovalidate>Cancelar</button>
         <button class="botao primario" value="ok">OK</button>
       </div>

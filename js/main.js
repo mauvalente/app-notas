@@ -7,7 +7,9 @@ import { configurarConversa, abrirConversa, fecharConversa, assuntoAtualizado, p
 import { buscarMensagens, itemResultado } from './busca.js';
 import { abrirBanco, apagarBanco, kvLer, kvGravar } from './store.js';
 import { processarFila, erroDeRede } from './sync.js';
-import { abrirNota, fecharNota, configurarNota, receberNota, sincronizarPendentes } from './nota.js';
+import { abrirNota, fecharNota, configurarNota, receberNota, sincronizarPendentes, acrescentarAoAbrir, buscarAoAbrir,
+         abrirBuscaNota, desmarcarTodos, apagarMarcados, copiarNota } from './nota.js';
+import { previaDaNota, textoDaNota } from './notamd.js';
 
 export const VERSAO = '1.0.0';
 
@@ -17,6 +19,8 @@ const estado = {
   assuntos: [],         // visíveis na lista, já ordenados
   ultimas: new Map(),   // categoria_id → { texto, titulo, criado_em }
   naoLidas: new Map(),  // categoria_id → quantidade
+  notas: new Map(),     // categoria_id → { conteudo, atualizado_em } (prévia e busca das notas)
+  alteradas: new Set(), // notas que a outra pessoa editou depois que eu abri
   filtro: '',
 };
 
@@ -132,7 +136,7 @@ function assinarTempoReal() {
 const ultimoMarcado = new Map();
 async function marcarLido(id) {
   if (!estado.usuario) return;
-  if (estado.naoLidas.delete(id)) desenharLista();
+  if (estado.naoLidas.delete(id) | estado.alteradas.delete(id)) desenharLista();
   if (Date.now() - (ultimoMarcado.get(id) || 0) < 3000) return;
   ultimoMarcado.set(id, Date.now());
   await supabase.from('categoria_membros').update({ lido_ate: new Date().toISOString() })
@@ -186,8 +190,14 @@ configurarConversa({
   marcarLido: (id) => marcarLido(id),
 });
 
+let timerPrevia = null;
 configurarNota({
   get usuario() { return estado.usuario; },
+  aoMudarConteudo(assuntoId, conteudo) {
+    estado.notas.set(assuntoId, { conteudo, atualizado_em: new Date().toISOString() });
+    clearTimeout(timerPrevia);
+    timerPrevia = setTimeout(desenharLista, 300);
+  },
   aoSalvar(assuntoId, quandoIso) {
     const a = estado.todos.find(x => x.id === assuntoId);
     if (a) { a.ultima_msg_em = quandoIso || new Date().toISOString(); ordenarEDesenhar(); }
@@ -241,7 +251,7 @@ function tratarCompartilhamento() {
 
 function desenharSalvarEm() {
   const f = normalizar($('salvar-em-busca').value);
-  const itens = estado.assuntos.filter(a => !ehNota(a) && (!f || normalizar(a.nome).includes(f)));
+  const itens = estado.assuntos.filter(a => !f || normalizar(a.nome).includes(f));
   $('salvar-em-lista').replaceChildren(...itens.map(a => el('li', {},
     el('button', { type: 'button', className: 'item-destino', dataset: { id: a.id } },
       avatarEl(a),
@@ -255,9 +265,11 @@ $('salvar-em-lista').addEventListener('click', (e) => {
   const b = e.target.closest('.item-destino');
   if (!b || !compartilhado) return;
   $('dlg-salvar-em').close('escolhido');
-  preencherAoAbrir(compartilhado);
+  const destino = estado.todos.find(a => a.id === b.dataset.id);
+  if (idDaRota() === b.dataset.id) { fecharConversa(); fecharNota(); } // força reabrir para pegar o texto
+  if (ehNota(destino)) acrescentarAoAbrir(compartilhado); // nota: entra no fim, com o link numa linha (vira card)
+  else preencherAoAbrir(compartilhado);
   compartilhado = null;
-  if (idDaRota() === b.dataset.id) fecharConversa(); // força reabrir para pegar o texto
   abrirAssunto(b.dataset.id);
 });
 
@@ -290,11 +302,13 @@ let carregando = null;
 function carregarAssuntos() {
   carregando ??= (async () => {
     try {
-      const [cats, minhas, ultimas, naoLidas] = await Promise.all([
+      const [cats, minhas, ultimas, naoLidas, notas, alteradas] = await Promise.all([
         supabase.from('categorias').select('id, nome, emoji, cor, tipo, dono_id, ultima_msg_em, criado_em'),
         supabase.from('categoria_membros').select('categoria_id, usuario_id, papel, fixada, arquivada'),
         supabase.rpc('ultimas_mensagens'),
         supabase.rpc('nao_lidas'),
+        supabase.from('notas').select('categoria_id, conteudo, atualizado_em'),
+        supabase.rpc('notas_alteradas'),
       ]);
       if (cats.error || minhas.error) {
         const erro = cats.error || minhas.error;
@@ -306,6 +320,7 @@ function carregarAssuntos() {
               estado.todos = guardado.todos;
               estado.ultimas = new Map(guardado.ultimas);
               estado.naoLidas = new Map(guardado.naoLidas || []);
+              estado.notas = new Map(guardado.notas || []);
               for (const id of guardado.comMembros || []) comMembros.add(id);
               ordenarEDesenhar();
             }
@@ -325,7 +340,14 @@ function carregarAssuntos() {
         estado.naoLidas = new Map(naoLidas.data.map(n => [n.categoria_id, n.qtd]));
         if (idDaRota()) estado.naoLidas.delete(idDaRota());
       }
-      kvGravar('assuntos', { todos: estado.todos, ultimas: [...estado.ultimas], naoLidas: [...estado.naoLidas], comMembros: [...comMembros] });
+      if (!notas.error && Array.isArray(notas.data)) {
+        estado.notas = new Map(notas.data.map(n => [n.categoria_id, { conteudo: n.conteudo, atualizado_em: n.atualizado_em }]));
+      }
+      if (!alteradas.error && Array.isArray(alteradas.data)) {
+        estado.alteradas = new Set(alteradas.data.map(n => n.categoria_id));
+        if (idDaRota()) estado.alteradas.delete(idDaRota());
+      }
+      kvGravar('assuntos', { todos: estado.todos, ultimas: [...estado.ultimas], naoLidas: [...estado.naoLidas], comMembros: [...comMembros], notas: [...estado.notas] });
       ordenarEDesenhar();
       // o assunto aberto pode ter sido apagado/abandonado em outro aparelho
       if (idDaRota() && !estado.todos.some(a => a.id === idDaRota())) aplicarRota();
@@ -368,8 +390,9 @@ function desenharLista() {
 
   ul.replaceChildren(...itens.map(a => {
     const u = estado.ultimas.get(a.id);
-    let previa = ehNota(a) ? 'Nota' : 'Sem mensagens';
-    if (u && !ehNota(a)) {
+    const nota = ehNota(a);
+    let previa = nota ? previaDaNota(estado.notas.get(a.id)?.conteudo || '') : 'Sem mensagens';
+    if (u && !nota) {
       const t = textoSimples(u.texto);
       previa = u.titulo && !t ? '🔗 ' + u.titulo : (u.titulo ? '🔗 ' : '') + t;
     }
@@ -378,10 +401,11 @@ function desenharLista() {
       el('div', { className: 'assunto-corpo' },
         el('div', { className: 'assunto-topo' },
           el('span', { className: 'assunto-nome' }, (a.fixada ? '📌 ' : '') + a.nome + (temOutros(a) ? ' 👥' : '')),
-          el('span', { className: 'assunto-hora' + (estado.naoLidas.get(a.id) ? ' com-nao-lidas' : '') }, quando(u?.criado_em || a.ultima_msg_em))),
+          el('span', { className: 'assunto-hora' + (estado.naoLidas.get(a.id) || estado.alteradas.has(a.id) ? ' com-nao-lidas' : '') }, quando((nota ? null : u?.criado_em) || a.ultima_msg_em))),
         el('div', { className: 'assunto-baixo' },
           el('div', { className: 'assunto-previa' }, previa),
-          estado.naoLidas.get(a.id) ? el('span', { className: 'nao-lidas' }, String(estado.naoLidas.get(a.id))) : null)));
+          estado.naoLidas.get(a.id) ? el('span', { className: 'nao-lidas' }, String(estado.naoLidas.get(a.id))) : null,
+          estado.alteradas.has(a.id) ? el('span', { className: 'ponto-alterada', title: 'Editada pela outra pessoa', 'aria-label': 'Editada pela outra pessoa' }) : null)));
   }));
 
   $('lista-vazia').hidden = estado.assuntos.length > 0;
@@ -405,26 +429,46 @@ function agendarBuscaGlobal() {
   const box = $('resultados-mensagens');
   if (termo.length < 2) { box.hidden = true; return; }
   box.hidden = false;
-  $('resultados-titulo').textContent = 'Mensagens · buscando…';
+  $('resultados-titulo').textContent = 'Mensagens e notas · buscando…';
   timerBuscaGlobal = setTimeout(async () => {
     let r;
     try { r = await buscarMensagens(termo); }
     catch (e) { r = { itens: [], erro: mensagemDe(e) }; }
+    const notas = await buscarNasNotas(termo);
     if (estado.filtro.trim() !== termo) return;
     const porId = new Map(estado.todos.map(a => [a.id, a]));
+    r.itens = [...notas, ...r.itens];
     $('resultados-lista').replaceChildren(...r.itens.map(m => itemResultado(m, porId.get(m.categoria_id), termo)));
     $('resultados-titulo').textContent = r.itens.length
-      ? `Mensagens (${r.itens.length}${r.itens.length === 50 ? '+' : ''})` + (r.offline ? ' · sem internet: só o que está no aparelho' : '')
-      : 'Mensagens';
+      ? `Mensagens e notas (${r.itens.length}${r.itens.length >= 50 ? '+' : ''})` + (r.offline ? ' · sem internet: só o que está no aparelho' : '')
+      : 'Mensagens e notas';
     $('resultados-vazio').hidden = r.itens.length > 0;
     $('resultados-vazio').textContent = r.erro || (r.offline ? 'Nada encontrado no que está guardado neste aparelho.' : 'Nenhuma mensagem encontrada.');
   }, 300);
 }
 
+/** Busca nas notas: no servidor (sem acento e por pedaço de palavra) ou no que está no aparelho. */
+async function buscarNasNotas(termo) {
+  const comoResultado = (categoria_id, conteudo, atualizado_em) =>
+    ({ id: 'nota:' + categoria_id, categoria_id, criado_em: atualizado_em, texto: textoDaNota(conteudo).replace(/\n/g, ' · '), link: null });
+  if (navigator.onLine) {
+    const { data, error } = await supabase.rpc('buscar_notas', { p_q: termo, p_limite: 50 });
+    if (!error) return (data || []).map(n => comoResultado(n.categoria_id, n.conteudo, n.atualizado_em));
+  }
+  const alvo = normalizar(termo);
+  return [...estado.notas].filter(([, n]) => normalizar(textoDaNota(n.conteudo)).includes(alvo))
+    .map(([id, n]) => comoResultado(id, n.conteudo, n.atualizado_em));
+}
+
 $('resultados-lista').addEventListener('click', (e) => {
   const b = e.target.closest('.resultado');
   if (!b) return;
-  irParaMensagem(b.dataset.id, b.dataset.criado, b.dataset.categoria);
+  if (b.dataset.id.startsWith('nota:')) {
+    if (idDaRota() === b.dataset.categoria) fecharNota();
+    buscarAoAbrir(estado.filtro.trim());          // abre a nota com o termo destacado
+  } else {
+    irParaMensagem(b.dataset.id, b.dataset.criado, b.dataset.categoria);
+  }
   abrirAssunto(b.dataset.categoria);
 });
 
@@ -480,10 +524,13 @@ function abrirMenuAssunto(id) {
   $('menu-compartilhar').textContent = dono ? '👥 Compartilhar' : '👥 Participantes';
   $('menu-excluir').hidden = !dono;
   $('menu-sair').hidden = dono;
-  for (const b of [$('menu-excluir'), $('menu-sair')]) {
+  const notaAberta = ehNota(a) && idDaRota() === a.id; // ações da nota: só com ela aberta (⋮ do cabeçalho)
+  for (const b of ['menu-copiar-nota', 'menu-desmarcar', 'menu-apagar-marcados']) $(b).hidden = !notaAberta;
+  for (const b of [$('menu-excluir'), $('menu-sair'), $('menu-apagar-marcados')]) {
     delete b.dataset.confirmar; b.classList.remove('confirmando');
   }
   $('menu-excluir').textContent = '🗑️ Excluir assunto';
+  $('menu-apagar-marcados').textContent = '🧹 Apagar marcados';
   $('menu-sair').textContent = '🚪 Sair do assunto';
   $('dlg-menu').showModal();
 }
@@ -512,6 +559,21 @@ $('menu-compartilhar').addEventListener('click', () => {
 });
 
 $('menu-fixar').addEventListener('click', () => atualizarMinhaParticipacao({ fixada: !assuntoDoMenu.fixada }));
+
+$('menu-copiar-nota').addEventListener('click', () => { $('dlg-menu').close(); copiarNota(); });
+$('menu-desmarcar').addEventListener('click', () => { $('dlg-menu').close(); desmarcarTodos(); });
+$('menu-apagar-marcados').addEventListener('click', (e) => {
+  confirmarComSegundoToque(e.currentTarget, 'Toque de novo para apagar', () => { $('dlg-menu').close(); apagarMarcados(); });
+});
+
+// Lupa do cabeçalho: na nota, abre a busca dentro da nota (antes do handler da conversa)
+$('barra-conversa').addEventListener('click', (e) => {
+  if (!e.target.closest('#btn-buscar-conversa')) return;
+  const a = estado.todos.find(x => x.id === idDaRota());
+  if (!ehNota(a)) return;
+  e.stopPropagation();
+  abrirBuscaNota();
+}, { capture: true });
 
 $('menu-arquivar').addEventListener('click', () => {
   const arquivar = !assuntoDoMenu.arquivada;
@@ -589,7 +651,11 @@ $('form-assunto').addEventListener('submit', async (e) => {
     $('assunto-erro').hidden = false;
     return;
   }
-  if (compartilhadoParaNovo) { preencherAoAbrir(compartilhadoParaNovo); compartilhadoParaNovo = null; }
+  if (compartilhadoParaNovo) {
+    if (tipo === 'nota' && !editando) acrescentarAoAbrir(compartilhadoParaNovo);
+    else preencherAoAbrir(compartilhadoParaNovo);
+    compartilhadoParaNovo = null;
+  }
   $('dlg-assunto').close();
   await carregarAssuntos();
   if (editando) aplicarRota();
@@ -694,7 +760,6 @@ function aplicarRota() {
   const nota = ehNota(assunto);
   $('conversa').classList.toggle('modo-nota', nota);
   $('nota-area').hidden = !nota;
-  $('btn-buscar-conversa').hidden = nota; // a busca dentro da nota chega na T9.13
 
   if (assunto) {
     $('conversa-titulo').textContent = assunto.nome + (temOutros(assunto) ? ' 👥' : '');
@@ -744,8 +809,11 @@ $('btn-exportar').addEventListener('click', async () => {
   b.disabled = true;
   b.textContent = 'Preparando…';
   try {
-    const cats = await supabase.from('categorias').select('id, nome, emoji, cor, dono_id, criado_em');
+    const cats = await supabase.from('categorias').select('id, nome, emoji, cor, tipo, dono_id, criado_em');
     if (cats.error) throw cats.error;
+    const notas = await supabase.from('notas').select('categoria_id, conteudo, atualizado_em');
+    if (notas.error) throw notas.error;
+    const notaDe = new Map(notas.data.map(n => [n.categoria_id, n]));
     const msgs = [];
     for (let de = 0; ; de += 1000) {
       const { data, error } = await supabase.from('mensagens')
@@ -766,6 +834,7 @@ $('btn-exportar').addEventListener('click', async () => {
       assuntos: cats.data.map(c => ({
         ...c,
         dono: nomes.get(c.dono_id) || null,
+        nota: c.tipo === 'nota' ? { conteudo: notaDe.get(c.id)?.conteudo ?? '', atualizado_em: notaDe.get(c.id)?.atualizado_em ?? null } : undefined,
         mensagens: msgs.filter(m => m.categoria_id === c.id)
           .map(({ categoria_id, ...m }) => ({ ...m, autor: nomes.get(m.autor_id) || null })),
       })),
@@ -774,7 +843,7 @@ $('btn-exportar').addEventListener('click', async () => {
     const a = el('a', { href: URL.createObjectURL(blob), download: `notas-backup-${new Date().toISOString().slice(0, 10)}.json` });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    toast(`Backup gerado: ${cats.data.length} assuntos, ${msgs.length} mensagens.`);
+    toast(`Backup gerado: ${cats.data.length} assuntos, ${msgs.length} mensagens, ${notas.data.length} notas.`);
   } catch (e) {
     toast('Não deu para exportar. ' + mensagemDe(e));
   } finally {

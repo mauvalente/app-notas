@@ -510,3 +510,34 @@ body:not(.carregando) .splash { opacity: 0; visibility: hidden; pointer-events: 
   }
   .nota-area.focado .nota-barra { display: flex; }
 }
+
+/* Card de link dentro da nota (URL sozinha numa linha) */
+.card-nota { margin: 8px 0 10px; max-width: 420px; user-select: none; -webkit-touch-callout: none; }
+.card-nota .card-link {
+  display: flex; flex-direction: column; border-radius: var(--raio); overflow: hidden;
+  border: 1px solid var(--linha); background: var(--fundo); color: inherit; text-decoration: none;
+}
+.card-nota .card-link.sem-imagem { flex-direction: row; }
+.card-nota .card-img { width: 100%; max-height: 220px; object-fit: cover; display: block; background: var(--linha); }
+.card-nota .card-txt { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.card-nota .card-titulo { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-nota .card-desc { font-size: 13px; color: var(--texto-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card-nota .card-site { font-size: 12px; color: var(--texto-2); }
+.nota-texto-editor .ProseMirror-selectednode.card-nota .card-link,
+.nota-texto-editor .card-nota.ProseMirror-selectednode .card-link { outline: 2px solid var(--marca); outline-offset: 2px; }
+
+/* Busca dentro da nota */
+.nota-busca {
+  display: flex; align-items: center; gap: 4px; padding: 6px 8px; flex: none;
+  background: var(--barra); border-bottom: 1px solid var(--linha);
+}
+.nota-busca[hidden] { display: none; }
+.nota-busca input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--painel); outline: 0; }
+.nota-busca-contador { font-size: 12.5px; color: var(--texto-2); min-width: 46px; text-align: center; }
+.nota-texto-editor .achado { background: color-mix(in srgb, var(--destaque) 35%, transparent); border-radius: 2px; }
+.nota-texto-editor .achado.atual { background: var(--destaque); color: #111; }
+
+/* Ponto de "editada pela outra pessoa" na lista */
+.ponto-alterada { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--marca); margin-left: 6px; }
+
+#dlg-link .acoes { flex-wrap: wrap; }

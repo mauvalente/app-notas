@@ -12,3 +12,6 @@ export { Link } from '@tiptap/extension-link';
 export { TaskList, TaskItem } from '@tiptap/extension-list';
 export { Placeholder } from '@tiptap/extensions';
 export { Markdown } from '@tiptap/markdown';
+// Peças do ProseMirror usadas pelo app (card de link e destaque da busca na nota)
+export { Plugin, PluginKey, TextSelection, NodeSelection } from '@tiptap/pm/state';
+export { Decoration, DecorationSet } from '@tiptap/pm/view';

@@ -317,6 +317,7 @@ notes/                      (repositório app-notas)
 │   ├── vendor/tiptap.js    editor da nota, empacotado uma vez (seção 12.5)
 │   ├── nota.js             tela da nota: editor, salvamento, merge e tempo real (seção 12)
 │   ├── mesclar.js          junta duas versões da nota linha a linha (seção 12.6)
+│   ├── notamd.js           Markdown da nota → texto (prévia, busca e Copiar)
 │   ├── store.js / sync.js  cache IndexedDB e fila offline
 │   ├── busca.js            busca nas mensagens (servidor/cache)
 │   ├── store.js            IndexedDB, fila de envio e sync
@@ -427,12 +428,13 @@ create index on notas using gin (busca);
 
 ### 12.4 Tela da nota
 
-- Cabeçalho igual ao da conversa (←, avatar, nome, ⋮). No ⋮: buscar na nota, compartilhar, renomear, arquivar, **Copiar tudo** (Markdown), **Desmarcar todos** e **Apagar marcados** (este com o segundo toque para confirmar, padrão do Contas).
+- Cabeçalho igual ao da conversa (←, avatar, nome, 🔍, ⋮). A 🔍 abre a busca dentro da nota (sem acento e sem maiúsculas, com ↑ ↓ e contador). No ⋮, com a nota aberta: **Copiar tudo** (texto para colar no WhatsApp: ☐/☑ nos itens, • nas listas, *subtítulo*), **Desmarcar todos** e **Apagar marcados** (este com o segundo toque para confirmar, padrão do Contas; apaga também os subitens do item marcado), além de compartilhar, renomear e arquivar.
 - Abaixo do cabeçalho, o editor ocupa toda a área. Não há campo de digitar nem botão ✈️.
 - **Barra de formatação**: no computador, fixa embaixo do cabeçalho; no celular, logo acima do teclado (só aparece com o editor em foco). Botões: **B**, _I_, ~~S~~, ☑ (lista de checkbox), • (lista), **T** (subtítulo) e 🔗 (link).
 - **Atalhos enquanto digita**: `[ ] ` ou `[] ` no começo da linha vira checkbox; `- ` vira lista; `## ` vira subtítulo; `**…**`, `_…_` e `~~…~~` formatam. No computador: Ctrl+B, Ctrl+I, Ctrl+Shift+S (riscado) e Ctrl+Shift+9 (checkbox).
 - **Checkbox**: tocar no quadradinho marca ou desmarca **sem abrir o teclado** no celular. Enter numa linha de checkbox cria outro checkbox; Enter num checkbox vazio sai da lista.
-- **Colar uma URL** sozinha numa linha vazia vira card de link (12.2). Tocar no card abre o link numa aba nova; para editar a URL, toque longo no card → Editar / Remover.
+- **Colar uma URL** sozinha numa linha vazia vira card de link na hora (12.2); digitar a URL vira card quando o cursor sai da linha. Tocar no card abre o link numa aba nova; toque longo (ou botão direito) no card → **Abrir / Remover / trocar o endereço**.
+- **Link no meio do texto**: com o teclado fechado, tocar abre o link; editando, o toque só posiciona o cursor (Ctrl/⌘ + clique abre sempre).
 - Indicador discreto no cabeçalho: "Salvando…", "Salvo", "🕓 Aguardando envio" ou "Atualizada por <nome>" (por alguns segundos, quando chega mudança da outra pessoa).
 
 ### 12.5 Editor

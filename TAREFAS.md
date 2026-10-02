@@ -80,11 +80,12 @@ Os marcados com 🛒 formam o mínimo para usar como lista de compras.
 - [x] 🛒 **T9.9** Fila offline com um item por nota + merge por linha (3 vias) quando `salvar_nota` devolver conflito; aviso "editadas pelos dois — confira" (SPEC 12.6)
 - [x] 🛒 **T9.10** Tempo real: aplicar a mudança da outra pessoa mantendo cursor e rolagem; merge se houver algo pendente; aviso "Atualizada por <nome>"
   - Testado no navegador com um Supabase simulado (celular e computador, 51 verificações): checkbox sem abrir o teclado, Enter cria o próximo item, salvamento único depois de digitar, barra B/I/S/☑/•/T/🔗, conflito juntado linha a linha, tempo real com "Atualizada por …", offline com reabrir e subir quando a internet volta. Junção testada em `ci/testes/mesclar.mjs` (13 casos). `sw.js` em `notas-v8`.
-- [ ] **T9.11** Card de link na nota: URL sozinha na linha vira card (cache `link_previews` + Edge Function); colar URL vira card; toque longo → Editar / Remover
-- [ ] **T9.12** Lista de assuntos: prévia da nota (primeira linha ou "☑ 3 de 10") e ponto de "editada pela outra pessoa" (`notas_alteradas` + `lido_ate`)
-- [ ] **T9.13** Menu ⋮ da nota: Copiar tudo, Desmarcar todos, Apagar marcados (segundo toque para confirmar), buscar na nota
-- [ ] **T9.14** Busca geral incluindo notas (`buscar_notas`), com trecho e salto até o termo destacado; busca offline na cópia local
-- [ ] **T9.15** "Salvar em…" para nota: acrescenta a URL no fim da nota e abre com o cursor ali; notas fora dos destinos de Mover; notas no Exportar JSON
+- [x] **T9.11** Card de link na nota: URL sozinha na linha vira card (cache `link_previews` + Edge Function); colar URL vira card; toque longo → Editar / Remover
+- [x] **T9.12** Lista de assuntos: prévia da nota (primeira linha ou "☑ 3 de 10") e ponto de "editada pela outra pessoa" (`notas_alteradas` + `lido_ate`)
+- [x] **T9.13** Menu ⋮ da nota: Copiar tudo, Desmarcar todos, Apagar marcados (segundo toque para confirmar), buscar na nota
+- [x] **T9.14** Busca geral incluindo notas (`buscar_notas`), com trecho e salto até o termo destacado; busca offline na cópia local
+- [x] **T9.15** "Salvar em…" para nota: acrescenta a URL no fim da nota e abre com o cursor ali; notas fora dos destinos de Mover; notas no Exportar JSON
+  - T9.11–T9.15 testadas no navegador com o Supabase simulado (celular e computador, 62 verificações), sem quebrar os testes anteriores. Detalhes que mudaram em relação ao plano: a busca na nota abre também pela lupa do cabeçalho; tocar num link no meio do texto abre o link quando não se está editando (editando, Ctrl/⌘ + clique); "Copiar tudo" gera texto com ☐/☑ para colar no WhatsApp. `sw.js` em `notas-v9`.
 - [ ] 🛒 **T9.16** Teste em aparelho real: lista de compras no Android e no iPhone (teclado, toque no checkbox, barra acima do teclado), os dois editando ao mesmo tempo, edição offline e volta da conexão
 
 ## Ordem sugerida

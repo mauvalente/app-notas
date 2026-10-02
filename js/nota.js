@@ -8,16 +8,20 @@
 //  - se a outra pessoa salvou antes, o servidor devolve o texto dele, o app junta
 //    linha a linha (mesclar.js) e salva de novo.
 import { supabase } from './db.js';
-import { $, el, toast, mensagemDe } from './util.js';
+import { $, el, toast, mensagemDe, normalizar, guardado } from './util.js';
 import { erroDeRede } from './sync.js';
 import { kvLer, kvGravar } from './store.js';
 import { mesclar } from './mesclar.js';
+import { buscarPreview, previewLeve, urlDaThumb } from './preview.js';
+import { cartaoLink } from './conversa.js';
+import { primeiraUrl } from './formatar.js';
+import { linhaSimples } from './notamd.js';
 
 const ESPERA_ENVIO = 800;
 const area = $('nota-area');
 const statusEl = $('nota-status');
 
-let ctx = { usuario: null, aoSalvar() {} };
+let ctx = { usuario: null, aoSalvar() {}, aoMudarConteudo() {} };
 export function configurarNota(c) { ctx = c; }
 
 // O editor (≈140 KB comprimido) só é baixado quando alguém abre uma nota.
@@ -64,7 +68,23 @@ const s = {
   timerEnvio: null,
   timerLocal: null,
   nomes: new Map(),    // usuario_id → nome (para "Atualizada por …")
+  mod: null,           // módulo do Tiptap
+  focadoAntes: false,  // o editor já estava em foco quando o toque começou?
 };
+
+// Pedidos para quando a nota terminar de abrir (vindos do "Salvar em…" e da busca geral)
+let acrescentarPendente = null;  // texto a acrescentar no fim
+let buscarPendente = null;       // termo a destacar
+/** Acrescenta este texto no fim da próxima nota aberta (SPEC 12.7, "Salvar em…"). */
+export function acrescentarAoAbrir(texto) { acrescentarPendente = texto; }
+/** Abre a busca na nota com este termo assim que ela abrir (resultado da busca geral). */
+export function buscarAoAbrir(termo) { buscarPendente = termo; }
+
+function terminouDeAbrir(id) {
+  if (s.id !== id || !s.editor) return;
+  if (acrescentarPendente) { const t = acrescentarPendente; acrescentarPendente = null; acrescentarNoFim(t); }
+  if (buscarPendente) { const t = buscarPendente; buscarPendente = null; abrirBuscaNota(t); }
+}
 
 export async function abrirNota(assunto) {
   if (s.id === assunto.id) return;
@@ -99,6 +119,7 @@ export async function abrirNota(assunto) {
       return;
     }
     mostrarStatus(local.pendente ? 'pendente' : '');
+    terminouDeAbrir(id);
     return;
   }
 
@@ -115,6 +136,7 @@ export async function abrirNota(assunto) {
     sincronizar(id); // tinha mudança minha guardada: sobe agora (junta se precisar)
   }
   carregarNomes(id);
+  terminouDeAbrir(id);
 }
 
 export function fecharNota() {
@@ -128,6 +150,8 @@ export function fecharNota() {
   area.classList.remove('focado');
   mostrarStatus('');
   fecharDialogoLink();
+  acrescentarPendente = null;
+  buscarPendente = null;
   // dá tempo da cópia local ser gravada antes de tentar subir
   setTimeout(() => sincronizar(id), 0);
 }
@@ -143,7 +167,7 @@ async function carregarNomes(id) {
    ============================================================ */
 
 function configuracao(mod) {
-  const { StarterKit, Link, TaskList, TaskItem, Placeholder, Markdown } = mod;
+  const { StarterKit, Link, TaskList, TaskItem, Placeholder, Markdown, Node, Extension } = mod;
   // URL sozinha (texto = endereço) volta como URL pura no Markdown: é o formato do card (SPEC 12.2)
   const LinkNota = Link.extend({
     renderMarkdown: (node, h, c) => {
@@ -167,14 +191,321 @@ function configuracao(mod) {
     TaskItem.configure({ nested: true }),
     Placeholder.configure({ placeholder: 'Escreva aqui… Toque em ☑ para começar uma lista com checkbox.' }),
     Markdown,
+    criarCardLink(mod, Node),
+    Extension.create({ name: 'buscaNota', addProseMirrorPlugins: () => [pluginBusca(mod)] }),
   ];
+}
+
+/* ---------- Card de link (SPEC 12.2): URL sozinha numa linha ---------- */
+// No Markdown, o card é só a URL numa linha. Ao abrir, o parágrafo que tem só um link
+// (texto = endereço) vira card. Ao digitar, vira card quando o cursor sai da linha;
+// ao colar, na hora.
+
+function criarCardLink(mod, Node) {
+  const { Plugin, PluginKey, TextSelection } = mod;
+  return Node.create({
+    name: 'cardLink',
+    group: 'block',
+    atom: true,
+    selectable: true,
+    draggable: false,
+    addAttributes() { return { href: { default: null } }; },
+    parseHTML() { return [{ tag: 'div[data-card-link]', getAttrs: (d) => ({ href: d.getAttribute('data-card-link') }) }]; },
+    renderHTML({ node }) { return ['div', { 'data-card-link': node.attrs.href }]; },
+    renderMarkdown: (node) => node.attrs.href || '',
+    addNodeView() { return ({ node, getPos }) => criarCardView(node, getPos); },
+    addProseMirrorPlugins() {
+      return [new Plugin({
+        key: new PluginKey('cardsDeLink'),
+        appendTransaction(trs, _velho, state) {
+          const colou = trs.some(t => t.getMeta('uiEvent') === 'paste');
+          const forcar = colou || trs.some(t => t.getMeta('converterCards'));
+          if (!forcar && !trs.some(t => t.docChanged || t.selectionSet)) return null;
+          const tipo = state.schema.nodes.cardLink, link = state.schema.marks.link;
+          const sel = state.selection.from;
+          const alvos = [];
+          state.doc.forEach((node, pos) => {     // só parágrafos soltos (não dentro de listas)
+            if (node.type.name !== 'paragraph' || node.childCount !== 1) return;
+            const t = node.firstChild;
+            const m = t.isText && t.marks.find(x => x.type === link);
+            const txt = t.text?.trim();
+            if (!m || txt !== m.attrs.href || !/^https?:\/\//i.test(txt)) return;
+            const dentro = sel >= pos && sel <= pos + node.nodeSize;
+            if (dentro && !forcar) return;        // ainda digitando a URL
+            alvos.push({ pos, fim: pos + node.nodeSize, href: txt, dentro });
+          });
+          if (!alvos.length) return null;
+          const tr = state.tr;
+          let cursor = null;
+          for (const a of alvos.reverse()) {
+            tr.replaceWith(a.pos, a.fim, tipo.create({ href: a.href }));
+            if (a.dentro && colou) cursor = a.pos + 1;
+          }
+          if (cursor != null) {
+            // depois de colar, o cursor vai para uma linha nova abaixo do card
+            const depois = tr.doc.nodeAt(cursor);
+            if (!depois || depois.type.name !== 'paragraph') tr.insert(cursor, state.schema.nodes.paragraph.create());
+            tr.setSelection(TextSelection.create(tr.doc, cursor + 1));
+          }
+          return tr.setMeta('addToHistory', !trs.some(t => t.getMeta('converterCards')));
+        },
+      })];
+    },
+  });
+}
+
+const PREVIEWS = 'notas.previews';
+const cachePreviews = guardado.ler(PREVIEWS, {});
+
+/** Preview do link: do aparelho, ou pela Edge Function (a mesma das mensagens). */
+async function obterPreview(href) {
+  if (cachePreviews[href]) return cachePreviews[href];
+  const p = await buscarPreview(href);
+  if (p && (p.titulo || p.imagem || p.site)) {
+    cachePreviews[href] = { url: p.url || href, titulo: p.titulo || null, descricao: p.descricao || null, site: p.site || null, imagem: p.imagem || null };
+    const chaves = Object.keys(cachePreviews);
+    if (chaves.length > 300) delete cachePreviews[chaves[0]];
+    guardado.gravar(PREVIEWS, cachePreviews);
+  }
+  return cachePreviews[href] || p;
+}
+
+function desenharCard(dom, href) {
+  const pintar = (p) => {
+    const card = cartaoLink({ ...p, url: href });
+    dom.replaceChildren(card);
+    card.querySelectorAll('img[data-thumb]').forEach(img => {
+      const sem = () => { card.classList.add('sem-imagem'); img.remove(); };
+      urlDaThumb(img.dataset.thumb).then(u => { img.src = u; }, sem);
+      img.addEventListener('error', sem, { once: true });
+    });
+  };
+  pintar(cachePreviews[href] || previewLeve(href));
+  if (!cachePreviews[href] && navigator.onLine) {
+    obterPreview(href).then(p => { if (p && dom.dataset.href === href) pintar(p); }).catch(() => { /* fica o card leve */ });
+  }
+}
+
+function criarCardView(node, getPos) {
+  const dom = el('div', { className: 'card-nota', contenteditable: 'false', dataset: { href: node.attrs.href } });
+  desenharCard(dom, node.attrs.href);
+
+  // toque longo (ou botão direito) → Editar / Remover; toque simples abre o link
+  let timer = null, longo = false, origem = null;
+  dom.addEventListener('pointerdown', (e) => {
+    longo = false; origem = { x: e.clientX, y: e.clientY };
+    if (e.button > 0) return;
+    timer = setTimeout(() => { longo = true; navigator.vibrate?.(15); abrirDialogoLink({ getPos, href: dom.dataset.href }); }, 500);
+  });
+  dom.addEventListener('pointermove', (e) => {
+    if (timer && origem && Math.hypot(e.clientX - origem.x, e.clientY - origem.y) > 10) { clearTimeout(timer); timer = null; }
+  });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) dom.addEventListener(t, () => { clearTimeout(timer); timer = null; });
+  dom.addEventListener('click', (e) => { if (longo) { e.preventDefault(); longo = false; } });
+  dom.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!longo) abrirDialogoLink({ getPos, href: dom.dataset.href }); });
+
+  return {
+    dom,
+    update(n) {
+      if (n.type.name !== 'cardLink') return false;
+      if (n.attrs.href !== dom.dataset.href) { dom.dataset.href = n.attrs.href; desenharCard(dom, n.attrs.href); }
+      return true;
+    },
+    stopEvent: (e) => e.type.startsWith('pointer') || e.type === 'click' || e.type === 'contextmenu',
+    ignoreMutation: () => true,
+  };
+}
+
+/* ---------- Busca dentro da nota (SPEC 12.4, ⋮ / lupa) ---------- */
+
+let chaveBusca = null;
+
+/** Trechos { from, to } do documento que batem com o termo (sem acento, sem maiúsculas). */
+function acharTodos(doc, termo) {
+  const alvo = normalizar(termo.trim());
+  const achados = [];
+  if (!alvo) return achados;
+  doc.descendants((node, pos) => {
+    if (!node.isText) return true;
+    const txt = node.text;
+    let norm = ''; const mapa = [];
+    for (let i = 0; i < txt.length; i++) { const n = normalizar(txt[i]); for (const ch of n) { norm += ch; mapa.push(i); } }
+    for (let j = norm.indexOf(alvo); j >= 0; j = norm.indexOf(alvo, j + 1)) {
+      achados.push({ from: pos + mapa[j], to: pos + mapa[j + alvo.length - 1] + 1 });
+    }
+    return false;
+  });
+  return achados;
+}
+
+function pluginBusca(mod) {
+  const { Plugin, PluginKey, Decoration, DecorationSet } = mod;
+  chaveBusca = new PluginKey('buscaNota');
+  const calcular = (doc, termo, atual) => {
+    const achados = termo ? acharTodos(doc, termo) : [];
+    const a = achados.length ? ((atual % achados.length) + achados.length) % achados.length : 0;
+    const deco = DecorationSet.create(doc, achados.map((r, i) => Decoration.inline(r.from, r.to, { class: i === a ? 'achado atual' : 'achado' })));
+    return { termo, atual: a, total: achados.length, deco };
+  };
+  return new Plugin({
+    key: chaveBusca,
+    state: {
+      init: () => ({ termo: '', atual: 0, total: 0, deco: DecorationSet.empty }),
+      apply(tr, v, _velho, novo) {
+        const meta = tr.getMeta(chaveBusca);
+        if (!meta && !tr.docChanged) return v;
+        return calcular(novo.doc, meta?.termo ?? v.termo, meta?.atual ?? v.atual);
+      },
+    },
+    props: { decorations: (st) => chaveBusca.getState(st).deco },
+  });
+}
+
+function buscar(termo, atual = 0) {
+  const ed = s.editor;
+  if (!ed || !chaveBusca) return;
+  ed.view.dispatch(ed.state.tr.setMeta(chaveBusca, { termo, atual }).setMeta('addToHistory', false));
+  const st = chaveBusca.getState(ed.state);
+  $('nota-busca-contador').textContent = st.termo ? (st.total ? `${st.atual + 1} de ${st.total}` : 'nada') : '';
+  requestAnimationFrame(() => area.querySelector('.achado.atual')?.scrollIntoView({ block: 'center' }));
+}
+
+export function abrirBuscaNota(termo = '') {
+  if (!s.editor) return;
+  const barra = $('nota-busca');
+  barra.hidden = false;
+  const input = $('nota-busca-texto');
+  input.value = termo;
+  buscar(termo);
+  if (!termo) setTimeout(() => input.focus(), 30);
+}
+
+function fecharBuscaNota() {
+  const barra = document.getElementById('nota-busca');
+  if (barra) barra.hidden = true;
+  buscar('');
+}
+
+function criarBarraBusca() {
+  const input = el('input', { id: 'nota-busca-texto', type: 'search', placeholder: 'Buscar na nota', autocomplete: 'off', enterkeyhint: 'search' });
+  const barra = el('div', { id: 'nota-busca', className: 'nota-busca', hidden: true },
+    input,
+    el('span', { id: 'nota-busca-contador', className: 'nota-busca-contador' }),
+    el('button', { type: 'button', className: 'icone-botao', 'aria-label': 'Anterior', onclick: () => buscar(input.value, chaveBusca.getState(s.editor.state).atual - 1) }, '↑'),
+    el('button', { type: 'button', className: 'icone-botao', 'aria-label': 'Próximo', onclick: () => buscar(input.value, chaveBusca.getState(s.editor.state).atual + 1) }, '↓'),
+    el('button', { type: 'button', className: 'icone-botao', 'aria-label': 'Fechar busca', onclick: fecharBuscaNota }, '✕'));
+  input.addEventListener('input', () => buscar(input.value, 0));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); buscar(input.value, chaveBusca.getState(s.editor.state).atual + (e.shiftKey ? -1 : 1)); }
+    if (e.key === 'Escape') { e.preventDefault(); fecharBuscaNota(); }
+  });
+  return barra;
+}
+
+/* ---------- Ações do menu ⋮ (SPEC 12.4) ---------- */
+
+/** Troca o texto inteiro da nota como se a pessoa tivesse editado (salva e entra no desfazer). */
+function substituirTexto(md) {
+  const ed = s.editor;
+  if (!ed) return false;
+  ed.commands.setContent(md, { contentType: 'markdown', emitUpdate: true });
+  converterCards();
+  return true;
+}
+
+const RE_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+\[([ xX])\]\s/;
+
+export function desmarcarTodos() {
+  const md = markdownDoEditor();
+  const novo = md.replace(/^(\s*(?:[-*+]|\d+[.)])\s+)\[[xX]\]/gm, '$1[ ]');
+  if (novo === md) { toast('Nenhum item marcado.'); return; }
+  substituirTexto(novo);
+  toast('Todos os itens foram desmarcados.');
+}
+
+export function apagarMarcados() {
+  const linhas = markdownDoEditor().split('\n');
+  const out = [];
+  let pularAte = -1, apagados = 0;
+  for (const l of linhas) {
+    const recuo = l.match(/^\s*/)[0].length;
+    if (pularAte >= 0) {
+      if (l.trim() && recuo > pularAte) continue;   // subitem do item apagado
+      pularAte = -1;
+    }
+    const m = RE_ITEM.exec(l);
+    if (m && m[2] !== ' ') { pularAte = recuo; apagados++; continue; }
+    out.push(l);
+  }
+  if (!apagados) { toast('Nenhum item marcado.'); return; }
+  substituirTexto(out.join('\n').replace(/\n{3,}/g, '\n\n').trim());
+  toast(apagados === 1 ? '1 item apagado.' : `${apagados} itens apagados.`);
+}
+
+/** Texto da nota para colar no WhatsApp etc.: ☐/☑ nos itens, • nas listas. */
+export async function copiarNota() {
+  const linhas = markdownDoEditor().split('\n').map(l => {
+    const recuo = ' '.repeat(Math.floor(l.match(/^\s*/)[0].length / 2) * 2);
+    const m = RE_ITEM.exec(l);
+    if (m) return recuo + (m[2] === ' ' ? '☐ ' : '☑ ') + linhaSimples(l);
+    if (/^\s*[-*+]\s/.test(l)) return recuo + '• ' + linhaSimples(l);
+    if (/^\s*#{1,6}\s/.test(l)) return '*' + linhaSimples(l) + '*';
+    return linhaSimples(l) || '';
+  });
+  const texto = linhas.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  try { await navigator.clipboard.writeText(texto); toast('Nota copiada.'); }
+  catch { toast('Não consegui copiar.'); }
+}
+
+/** Acrescenta texto (ex.: link compartilhado) no fim da nota, com o link numa linha própria. */
+function acrescentarNoFim(texto) {
+  const url = primeiraUrl(texto);
+  const resto = (url ? texto.replace(url, '') : texto).trim();
+  const partes = [resto, url].filter(Boolean);
+  if (!partes.length) return;
+  const md = markdownDoEditor();
+  substituirTexto((md ? md + '\n\n' : '') + partes.join('\n\n'));
+  const ed = s.editor;
+  ed.commands.focus('end');
+  requestAnimationFrame(() => { const r = area.querySelector('.nota-rolagem'); if (r) r.scrollTop = r.scrollHeight; });
+}
+
+/** Converte em card os links sozinhos numa linha (ao abrir e depois de trocar o conteúdo). */
+function converterCards() {
+  const ed = s.editor;
+  if (!ed) return;
+  ed.view.dispatch(ed.state.tr.setMeta('converterCards', true).setMeta('addToHistory', false));
+}
+
+/* ---------- Links no meio do texto: tocar abre quando não está editando ---------- */
+// Com o teclado fechado, tocar num link abre o link. Editando (cursor no texto),
+// o toque só posiciona o cursor; Ctrl/⌘ + clique abre sempre.
+
+function configurarLinks(raiz) {
+  const linkDe = (e) => !e.target.closest('.card-nota') && e.target.closest('a[href]');
+  raiz.addEventListener('pointerdown', (e) => {
+    s.focadoAntes = !!s.editor?.isFocused;
+    if (linkDe(e) && !s.focadoAntes) e.preventDefault();
+  }, { capture: true });
+  raiz.addEventListener('mousedown', (e) => { if (linkDe(e) && !s.focadoAntes) e.preventDefault(); }, { capture: true });
+  raiz.addEventListener('click', (e) => {
+    const a = linkDe(e);
+    if (!a) return;
+    if (!s.focadoAntes || e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const href = a.getAttribute('href');
+      if (/^https?:\/\//i.test(href)) window.open(href, '_blank', 'noopener');
+    }
+  }, { capture: true });
 }
 
 function montarEditor(mod, conteudo) {
   if (s.editor) { aplicarNoEditor(conteudo); return; }
+  s.mod = mod;
   const barra = criarBarra();
   const elEditor = el('div', { className: 'nota-editor' });
-  area.replaceChildren(barra, el('div', { className: 'nota-rolagem' }, el('div', { className: 'nota-folha' }, elEditor)));
+  area.replaceChildren(barra, criarBarraBusca(), el('div', { className: 'nota-rolagem' }, el('div', { className: 'nota-folha' }, elEditor)));
 
   s.editor = new mod.Editor({
     element: elEditor,
@@ -189,6 +520,9 @@ function montarEditor(mod, conteudo) {
     onTransaction: atualizarBarra,
   });
   configurarCheckboxSemTeclado(elEditor);
+  configurarLinks(elEditor);
+  s.aplicando = true;
+  try { converterCards(); } finally { s.aplicando = false; }
   atualizarBarra();
 }
 
@@ -208,6 +542,7 @@ function aplicarNoEditor(texto) {
   s.aplicando = true;
   try {
     ed.commands.setContent(texto, { contentType: 'markdown', emitUpdate: false });
+    converterCards();
     if (focado) ed.commands.setTextSelection(Math.min(from, ed.state.doc.content.size - 1));
   } finally {
     s.aplicando = false;
@@ -312,18 +647,22 @@ function atualizarBarra() {
 
 const dlgLink = $('dlg-link');
 
-function abrirDialogoLink() {
+let cardEditando = null; // { getPos, href } quando o diálogo veio de um card
+
+function abrirDialogoLink(card = null) {
   const ed = s.editor;
   if (!ed) return;
-  const atual = ed.getAttributes('link').href || '';
+  cardEditando = card;
+  const atual = card ? card.href : (ed.getAttributes('link').href || '');
   $('link-url').value = atual;
   $('link-remover').hidden = !atual;
+  $('link-abrir').hidden = !card;
   $('link-erro').hidden = true;
   dlgLink.showModal();
   setTimeout(() => $('link-url').focus(), 50);
 }
 
-function fecharDialogoLink() { if (dlgLink?.open) dlgLink.close(); }
+function fecharDialogoLink() { cardEditando = null; if (dlgLink?.open) dlgLink.close(); }
 
 $('form-link').addEventListener('submit', (e) => {
   const v = e.submitter?.value;
@@ -331,9 +670,21 @@ $('form-link').addEventListener('submit', (e) => {
   e.preventDefault();
   const ed = s.editor;
   if (!ed) { dlgLink.close(); return; }
-  if (v === 'remover') {
-    ed.chain().focus().extendMarkRange('link').unsetLink().run();
+  const card = cardEditando;
+  cardEditando = null;
+  if (v === 'abrir' && card) {
     dlgLink.close();
+    window.open(card.href, '_blank', 'noopener');
+    return;
+  }
+  if (v === 'remover') {
+    dlgLink.close();
+    if (card) {
+      const pos = card.getPos();
+      if (typeof pos === 'number') ed.view.dispatch(ed.state.tr.delete(pos, pos + 1));
+    } else {
+      ed.chain().focus().extendMarkRange('link').unsetLink().run();
+    }
     return;
   }
   let url = $('link-url').value.trim();
@@ -344,6 +695,11 @@ $('form-link').addEventListener('submit', (e) => {
     return;
   }
   dlgLink.close();
+  if (card) {
+    const pos = card.getPos();
+    if (typeof pos === 'number') ed.view.dispatch(ed.state.tr.setNodeMarkup(pos, undefined, { href: url }));
+    return;
+  }
   const { empty } = ed.state.selection;
   if (empty && !ed.isActive('link')) {
     ed.chain().focus().insertContent({ type: 'text', text: url, marks: [{ type: 'link', attrs: { href: url } }] }).insertContent(' ').run();
@@ -375,6 +731,7 @@ function aoEditar() {
   const md = markdownDoEditor();
   rec.conteudo = md;
   rec.pendente = md !== rec.base_conteudo;
+  ctx.aoMudarConteudo?.(id, md);
   mostrarStatus(rec.pendente ? 'salvando' : 'salvo');
   clearTimeout(s.timerLocal);
   s.timerLocal = setTimeout(() => gravarLocal(id, rec), 250);
@@ -441,6 +798,7 @@ async function sincronizar(id) {
       atual.conteudo = m.texto;
       atual.pendente = m.texto !== deles;
       await gravarLocal(id, atual);
+      ctx.aoMudarConteudo?.(id, m.texto);
       if (s.id === id) {
         aplicarNoEditor(m.texto);
         if (m.conflito) toast('Algumas linhas foram editadas pelos dois ao mesmo tempo. Confira a nota.', 6000);
