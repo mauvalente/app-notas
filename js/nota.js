@@ -566,7 +566,9 @@ function configurarCheckboxSemTeclado(raiz) {
     if (!li) return;
     e.preventDefault();
     e.stopPropagation();
-    alternarItem(li);
+    // Com o clique cancelado, o navegador desfaz a marcação do quadradinho DEPOIS
+    // deste evento. Por isso a troca acontece logo em seguida, quando ele já desfez.
+    setTimeout(() => alternarItem(li), 0);
   }, { capture: true });
 }
 
@@ -582,7 +584,11 @@ function alternarItem(li) {
   });
   if (pos == null) return;
   const node = view.state.doc.nodeAt(pos);
-  view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: !node.attrs.checked }));
+  const marcado = !node.attrs.checked;
+  view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: marcado }));
+  // garante o desenho do quadradinho igual ao estado da nota
+  const cb = li.querySelector(':scope > label input[type="checkbox"]');
+  if (cb) cb.checked = marcado;
   navigator.vibrate?.(8);
 }
 

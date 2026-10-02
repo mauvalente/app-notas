@@ -86,6 +86,7 @@ Os marcados com 🛒 formam o mínimo para usar como lista de compras.
 - [x] **T9.14** Busca geral incluindo notas (`buscar_notas`), com trecho e salto até o termo destacado; busca offline na cópia local
 - [x] **T9.15** "Salvar em…" para nota: acrescenta a URL no fim da nota e abre com o cursor ali; notas fora dos destinos de Mover; notas no Exportar JSON
   - T9.11–T9.15 testadas no navegador com o Supabase simulado (celular e computador, 62 verificações), sem quebrar os testes anteriores. Detalhes que mudaram em relação ao plano: a busca na nota abre também pela lupa do cabeçalho; tocar num link no meio do texto abre o link quando não se está editando (editando, Ctrl/⌘ + clique); "Copiar tudo" gera texto com ☐/☑ para colar no WhatsApp. `sw.js` em `notas-v9`.
+  - Correção (02/10/2026, achada no teste no celular): o quadradinho do checkbox só aparecia marcado depois de sair e voltar da nota (o texto já ficava riscado e a nota já salvava). O navegador desfazia a marcação depois do toque; agora a troca acontece logo em seguida. Teste novo cobre marcar, desmarcar e marcar de novo. `sw.js` em `notas-v10`.
 - [ ] 🛒 **T9.16** Teste em aparelho real: lista de compras no Android e no iPhone (teclado, toque no checkbox, barra acima do teclado), os dois editando ao mesmo tempo, edição offline e volta da conexão
 
 ## Ordem sugerida

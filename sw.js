@@ -1,6 +1,6 @@
 // Service worker: guarda a "casca" do app para abrir rápido e funcionar offline.
 // Ao publicar uma nova versão dos arquivos, aumente o número abaixo.
-const CACHE = 'notas-v9';
+const CACHE = 'notas-v10';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './config.js',
   './css/app.css', './js/main.js', './js/auth.js', './js/db.js', './js/util.js', './js/formatar.js',
