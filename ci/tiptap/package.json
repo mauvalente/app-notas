@@ -1,0 +1,19 @@
+{
+  "name": "app-notas-tiptap",
+  "private": true,
+  "description": "Gera js/vendor/tiptap.js (editor da nota). Só roda quando for atualizar o Tiptap.",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild entrada.js --bundle --format=esm --minify --target=es2020 --legal-comments=eof --outfile=../../js/vendor/tiptap.js"
+  },
+  "devDependencies": {
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-link": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extensions": "3.31.4",
+    "@tiptap/markdown": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "esbuild": "0.28.2"
+  }
+}

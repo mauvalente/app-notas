@@ -1,10 +1,10 @@
 // Service worker: guarda a "casca" do app para abrir rápido e funcionar offline.
 // Ao publicar uma nova versão dos arquivos, aumente o número abaixo.
-const CACHE = 'notas-v5';
+const CACHE = 'notas-v6';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './config.js',
   './css/app.css', './js/main.js', './js/auth.js', './js/db.js', './js/util.js', './js/formatar.js',
-  './js/preview.js', './js/conversa.js', './js/store.js', './js/sync.js', './js/busca.js', './js/vendor/supabase.js',
+  './js/preview.js', './js/conversa.js', './js/store.js', './js/sync.js', './js/busca.js', './js/vendor/supabase.js', './js/vendor/tiptap.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',
 ];
 

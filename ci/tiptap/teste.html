@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teste do editor das notas</title>
+<!--
+  Teste do js/vendor/tiptap.js (SPEC 12.5). Rode depois de cada "npm run build":
+    na raiz do repositório: python3 -m http.server 8000
+    abra: http://localhost:8000/ci/tiptap/teste.html
+  Tudo verde = o Markdown entra e sai do editor sem perder nada.
+  A configuração do editor aqui é a mesma que o js/nota.js vai usar.
+-->
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 16px; max-width: 760px; }
+  .ok { color: #1a7f37; } .falhou { color: #cf222e; font-weight: 600; }
+  pre { background: #f6f8fa; padding: 6px 8px; white-space: pre-wrap; font-size: 13px; }
+  #ed { border: 1px solid #ccc; padding: 8px; margin-top: 16px; min-height: 60px; }
+  #ed ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
+  #ed li[data-checked="true"] > div { text-decoration: line-through; opacity: .6; }
+  #ed ul[data-type="taskList"] li { display: flex; gap: 6px; align-items: baseline; }
+  #ed ul[data-type="taskList"] li p { margin: 0; }
+</style>
+<h1>Teste do editor das notas</h1>
+<p id="resumo">Rodando…</p>
+<ul id="lista"></ul>
+<div id="ed"></div>
+<script type="module">
+import { Editor, StarterKit, Link, TaskList, TaskItem, Placeholder, Markdown } from '../../js/vendor/tiptap.js';
+// Link cujo texto é o próprio endereço volta como URL pura (vira card na nota)
+const LinkNota = Link.extend({
+  // O Markdown monta a marca com um marcador no lugar do texto; o texto real vem em ctx.meta.markText
+  renderMarkdown: (node, h, ctx) => {
+    const href = node.attrs?.href ?? '', title = node.attrs?.title ?? '';
+    const texto = h.renderChildren(node);
+    if (!title && ctx?.meta?.markText === href) return texto;
+    return title ? `[${texto}](${href} "${title}")` : `[${texto}](${href})`;
+  },
+});
+window.criar = (md) => {
+  if (window.editor) window.editor.destroy();
+  document.querySelector('#ed').innerHTML = '';
+  window.editor = new Editor({
+    element: document.querySelector('#ed'),
+    extensions: [
+      StarterKit.configure({ heading: { levels: [2] }, code: false, codeBlock: false, blockquote: false,
+        horizontalRule: false, underline: false, link: false }),
+      LinkNota.configure({ openOnClick: false, autolink: true, isAllowedUri: (u) => /^https?:\/\//i.test(u) }),
+      TaskList, TaskItem.configure({ nested: true }),
+      Placeholder.configure({ placeholder: 'Escreva aqui…' }),
+      Markdown,
+    ],
+    content: md, contentType: 'markdown',
+  });
+  return { md: window.editor.getMarkdown(), html: window.editor.getHTML() };
+};
+
+const CASOS = [
+ {
+  "nome": "lista de compras com checkbox",
+  "md": "- [ ] leite\n- [x] pão\n- [ ] café",
+  "html_tem": [
+   "data-checked=\"true\"",
+   "data-type=\"taskList\""
+  ]
+ },
+ {
+  "nome": "negrito, itálico e riscado",
+  "md": "**negrito** _itálico_ ~~riscado~~",
+  "esperado": "**negrito** *itálico* ~~riscado~~"
+ },
+ {
+  "nome": "subtítulo + lista",
+  "md": "## Hortifrúti\n\n- [ ] alface\n- [ ] tomate\n\n## Limpeza\n\n- [x] detergente"
+ },
+ {
+  "nome": "lista simples e numerada",
+  "md": "- um\n- dois\n\n1. primeiro\n2. segundo"
+ },
+ {
+  "nome": "link com texto",
+  "md": "veja [o vídeo](https://youtube.com/watch?v=1) depois",
+  "html_tem": [
+   "href=\"https://youtube.com/watch?v=1\""
+  ]
+ },
+ {
+  "nome": "URL sozinha numa linha",
+  "md": "https://www.instagram.com/p/XYZ/",
+  "html_tem": [
+   "href=\"https://www.instagram.com/p/XYZ/\""
+  ]
+ },
+ {
+  "nome": "HTML bruto não vira HTML",
+  "md": "<img src=x onerror=alert(1)> <script>alert(1)<\/script>",
+  "html_nao_tem": [
+   "<img",
+   "<script"
+  ],
+  "esperado": ""
+ },
+ {
+  "nome": "link javascript: é bloqueado",
+  "md": "[clique](javascript:alert(1))",
+  "html_nao_tem": [
+   "javascript:"
+  ]
+ },
+ {
+  "nome": "subtítulo de nível 1 vira texto ou nível 2",
+  "md": "# Título",
+  "html_nao_tem": [
+   "<h1"
+  ]
+ },
+ {
+  "nome": "acentos e emoji",
+  "md": "- [ ] açúcar 🍬\n- [x] maçã"
+ },
+ {
+  "nome": "checkbox aninhado",
+  "md": "- [ ] mercado\n  - [ ] frutas\n  - [x] pão"
+ },
+ {
+  "nome": "\"<\" e \">\" ficam como &lt; &gt; no Markdown (na tela aparecem normais)",
+  "md": "2 < 3 e 5 > 4",
+  "html_nao_tem": [
+   "<b>"
+  ],
+  "esperado": "2 &lt; 3 e 5 &gt; 4",
+  "html_tem": [
+   "2 &lt; 3"
+  ]
+ },
+ {
+  "nome": "URL sozinha no meio de uma lista",
+  "md": "- [ ] comprar https://loja.com/produto"
+ },
+ {
+  "nome": "link com texto diferente do endereço continua [texto](url)",
+  "md": "[loja](https://loja.com)"
+ }
+];
+
+const lista = document.querySelector('#lista');
+let falhas = 0;
+const marca = (ok, nome, detalhe = '') => {
+  if (!ok) falhas++;
+  const li = document.createElement('li');
+  li.className = ok ? 'ok' : 'falhou';
+  li.textContent = (ok ? '✓ ' : '✗ ') + nome;
+  if (!ok && detalhe) { const pre = document.createElement('pre'); pre.textContent = detalhe; li.append(pre); }
+  lista.append(li);
+};
+
+for (const c of CASOS) {
+  const r = window.criar(c.md);
+  const esperado = c.esperado ?? c.md;
+  const ok = r.md.trim() === esperado.trim()
+    && (c.html_tem || []).every(s => r.html.includes(s))
+    && (c.html_nao_tem || []).every(s => !r.html.includes(s));
+  marca(ok, c.nome, `saiu:     ${JSON.stringify(r.md)}\nesperado: ${JSON.stringify(esperado)}\nhtml:     ${r.html}`);
+}
+
+// Tocar no checkbox grava "- [x]"
+window.criar('- [ ] leite\n- [ ] pão');
+document.querySelector('#ed ul[data-type="taskList"] li input[type="checkbox"]').click();
+const md = window.editor.getMarkdown();
+marca(md.trim() === '- [x] leite\n- [ ] pão', 'tocar no checkbox grava - [x]', md);
+
+// "<script>" como texto continua texto depois de salvar e abrir de novo
+window.criar('');
+window.editor.commands.insertContent({ type: 'text', text: '<script>alert(1)<\/script> & <b>oi<\/b>' });
+const md1 = window.editor.getMarkdown();
+const r2 = window.criar(md1);
+marca(!r2.html.includes('<script') && !r2.html.includes('<b>') && r2.md === md1 && window.editor.getText().includes('<script>'),
+      '"<script>" digitado continua texto depois de salvar e abrir de novo', JSON.stringify({ md1, r2 }));
+
+window.criar('## Exemplo\n\n- [ ] leite\n- [x] pão\n\nhttps://www.youtube.com/watch?v=1');
+document.querySelector('#resumo').innerHTML = falhas
+  ? `<b class="falhou">${falhas} falha(s)<\/b>`
+  : '<b class="ok">Tudo OK<\/b> — dá para mexer no editor abaixo.';
+window.resultado = { falhas, total: lista.children.length };
+</script>
+</html>

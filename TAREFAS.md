@@ -60,12 +60,33 @@ Detalhes de cada item no [SPEC.md](SPEC.md). Os marcados com ⭐ formam o **MVP*
 - [x] **T7.4** Supabase Realtime nos assuntos compartilhados
 - [x] **T7.5** Contador de não lidas (`lido_ate`)
 
-## Fase 8 — Busca e acabamento — pronta; publicar e testar (README, passo 11)
+## Fase 8 — Busca e acabamento — pronta e testada
 - [x] **T8.1** Busca geral (full-text) e dentro da conversa, com salto até a mensagem destacada
 - [x] **T8.2** Exportar tudo em JSON (backup)
 - [x] **T8.3** GitHub Actions: backup semanal (`pg_dump` num repositório privado) + ping para o Supabase não pausar — rodou OK em 01/10/2026
 - [x] **T8.4** README com o passo a passo de instalação e de cada fase
 - [x] **T8.5** Teste em aparelho real: instalar no Android, compartilhar do Instagram, YouTube e TikTok, uso offline, login depois de reinstalar
 
+## Fase 9 — Assunto do tipo Nota (SPEC 12) — em andamento
+Os marcados com 🛒 formam o mínimo para usar como lista de compras.
+- [x] 🛒 **T9.1** Migration `005_notas.sql`: coluna `categorias.tipo`, tabela `notas` com `versao` e `busca`, RLS só de leitura, RPC `salvar_nota` com controle de versão, trigger de `ultima_msg_em`, `buscar_notas`, `notas_alteradas` e `notas` no tempo real (SPEC 12.3)
+- [x] 🛒 **T9.2** Roteiro de teste da 005: quem não é membro não lê nem grava; `salvar_nota` recusa versão velha e devolve o estado atual; não grava em assunto do tipo Conversa; excluir o assunto apaga a nota — `supabase/testes/teste_005_notas.sql`, 32 verificações passando num Postgres local que simula o Supabase; 005 aplicada no projeto real em 02/10/2026
+- [x] 🛒 **T9.3** Empacotar o Tiptap (StarterKit, Link, TaskList, TaskItem, Markdown) em `js/vendor/tiptap.js` com o script `ci/tiptap/` (esbuild, versões fixas); incluir no cache do service worker (SPEC 12.5) — Tiptap 3.31.4, teste em `ci/tiptap/teste.html` com 16 verificações OK; `sw.js` em `notas-v6`
+- [ ] 🛒 **T9.4** Criar assunto escolhendo **Conversa** ou **Nota**; rota da nota (`#/c/<id>` abre o editor quando `tipo = 'nota'`); 📝 no avatar da lista
+- [ ] 🛒 **T9.5** Tela da nota (`js/nota.js`): editor ocupando a área, leitura e gravação em Markdown GFM, sem HTML bruto (SPEC 12.2 e 12.8)
+- [ ] 🛒 **T9.6** Checkbox: lista de checkbox, marcar sem abrir o teclado no celular, riscado e opacidade por CSS, Enter cria o próximo item e Enter no item vazio sai da lista
+- [ ] 🛒 **T9.7** Barra de formatação (B, I, S, ☑, •, ##, 🔗): fixa no computador, acima do teclado no celular; atalhos de digitação (`[ ] `, `- `, `## `) e de teclado (Ctrl+B, Ctrl+I, Ctrl+Shift+S, Ctrl+Shift+9)
+- [ ] 🛒 **T9.8** Salvamento automático (800 ms, ao sair, `visibilitychange`), cópia local no IndexedDB e indicador "Salvando… / Salvo / 🕓 Aguardando envio"
+- [ ] 🛒 **T9.9** Fila offline com um item por nota + merge por linha (3 vias) quando `salvar_nota` devolver conflito; aviso "editadas pelos dois — confira" (SPEC 12.6)
+- [ ] 🛒 **T9.10** Tempo real: aplicar a mudança da outra pessoa mantendo cursor e rolagem; merge se houver algo pendente; aviso "Atualizada por <nome>"
+- [ ] **T9.11** Card de link na nota: URL sozinha na linha vira card (cache `link_previews` + Edge Function); colar URL vira card; toque longo → Editar / Remover
+- [ ] **T9.12** Lista de assuntos: prévia da nota (primeira linha ou "☑ 3 de 10") e ponto de "editada pela outra pessoa" (`notas_alteradas` + `lido_ate`)
+- [ ] **T9.13** Menu ⋮ da nota: Copiar tudo, Desmarcar todos, Apagar marcados (segundo toque para confirmar), buscar na nota
+- [ ] **T9.14** Busca geral incluindo notas (`buscar_notas`), com trecho e salto até o termo destacado; busca offline na cópia local
+- [ ] **T9.15** "Salvar em…" para nota: acrescenta a URL no fim da nota e abre com o cursor ali; notas fora dos destinos de Mover; notas no Exportar JSON
+- [ ] 🛒 **T9.16** Teste em aparelho real: lista de compras no Android e no iPhone (teclado, toque no checkbox, barra acima do teclado), os dois editando ao mesmo tempo, edição offline e volta da conexão
+
 ## Ordem sugerida
 0 → 2 → 3 → 1 → 4 → 5 → 6 (MVP pronto) → 7 → 8
+
+Fase 9 (Nota): T9.1 → T9.2 → T9.3 → T9.4 → T9.5 → T9.6 → T9.7 → T9.8 (lista de compras já usável sozinho) → T9.9 → T9.10 → T9.16 → demais
